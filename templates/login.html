@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ app_title }} – Login</title>
+  <style>
+    /* Minimal login page: replace with your identity provider’s widgets later */
+    body{font-family:system-ui,Arial;margin:40px;max-width:480px}
+    form{display:flex;flex-direction:column;gap:10px}
+    input,button{padding:10px;border-radius:8px;border:1px solid #ccc}
+    .err{color:#b00;margin:8px 0}
+  </style>
+</head>
+<body>
+  <h1>Login Operator</h1>
+  <!-- If the backend supplied an 'err' value, show it here -->
+  {% if err %}<div class="err">{{ err }}</div>{% endif %}
+
+  <!-- Posts to /login; on success the server sets an HttpOnly cookie and redirects to /operator -->
+  <form method="post" action="/login">
+    <input name="email" placeholder="Email" value="operator@example.com"/>
+    <input name="password" type="password" placeholder="Parola" value="demo1234"/>
+    <button type="submit">Autentificare</button>
+  </form>
+</body>
+</html>

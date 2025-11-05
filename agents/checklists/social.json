@@ -1,0 +1,9 @@
+{
+  "program": "AS",
+  "required_docs": [
+    "cerere_ajutor",
+    "carte_identitate",
+    "acte_venit",
+    "acte_locuire"
+  ]
+}

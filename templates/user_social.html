@@ -1,0 +1,332 @@
+<!-- templates/user_social.html -->
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8"/>
+  <title>Ajutor social – Formular</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root { --main: 1fr; --rail: minmax(280px, 30%); }
+    html, body { height: 100%; }
+    body{ font-family:system-ui,Arial; margin:0; padding:16px; background:#f8f9fb; color:#222; }
+    .two-col { display:grid; grid-template-columns: var(--main) var(--rail); gap:16px; align-items:start; }
+    @media (max-width: 900px){ .two-col{ grid-template-columns:1fr; } }
+    main .card, fieldset{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:14px; }
+    fieldset{ margin-bottom:16px; }
+    label{ display:block; margin-top:8px }
+    input,select,button{ padding:8px; border-radius:8px; border:1px solid #ccc; width:100% }
+    .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
+    .ok{ color:#0a7f2e } .err{ color:#b00 } .muted{ color:#666; font-size:12px } .hidden{ display:none }
+    aside.chat-col { position: sticky; top: 16px; height: calc(100vh - 32px); overflow:auto; }
+    .dim { opacity:.45; pointer-events:none; filter: grayscale(40%); }
+    input[type="checkbox"]:disabled:checked { accent-color:#0a7f2e; }
+  </style>
+</head>
+<body>
+<div class="two-col">
+  <main>
+    <div class="card">
+      <h1>Ajutor social (Venit de incluziune) – Cerere</h1>
+
+      <!-- Slots first (AS slots from Primărie) -->
+      <fieldset id="slotsBox">
+        <legend>Alege programarea (obligatoriu înainte de completare)</legend>
+        <div class="row">
+          <div>
+            <label>Locație
+              <select id="loc">
+                <option value="Bucuresti-S1">Bucuresti-S1</option>
+                <option value="Ilfov-01">Ilfov-01</option>
+              </select>
+            </label>
+          </div>
+          <div>
+            <label>Sloturi
+              <select id="slot"></select>
+            </label>
+          </div>
+        </div>
+        <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+          <button id="btnUseSlot" type="button">Folosește acest slot</button>
+          <span class="muted">Nu rezervă încă. Doar deblochează formularul.</span>
+        </div>
+        <div id="slotPicked" class="muted" style="margin-top:8px"></div>
+      </fieldset>
+
+      <!-- Gate: form disabled until slot is chosen -->
+      <div id="gate" class="dim">
+        <!-- Person -->
+        <fieldset>
+          <legend>Date solicitant</legend>
+          <div class="row">
+            <label>CNP <input id="cnp"></label>
+            <label>Telefon <input id="telefon"></label>
+            <label>Nume <input id="nume"></label>
+            <label>Prenume <input id="prenume"></label>
+            <label>Email <input id="email"></label>
+            <label>Adresă <input id="adresa"></label>
+          </div>
+        </fieldset>
+
+        <!-- Application -->
+        <fieldset>
+          <legend>Tip cerere</legend>
+          <div class="row">
+            <label>Program
+              <input id="program" value="AS" disabled>
+            </label>
+            <label>Eligibilitate (motiv)
+              <select id="elig">
+                <option value="AS_DEFAULT" selected>AS_DEFAULT</option>
+              </select>
+            </label>
+          </div>
+          <div id="valMsg" class="hidden"></div>
+        </fieldset>
+
+        <!-- Upload documents (OCR-only; disabled checkboxes) -->
+        <fieldset>
+          <legend>Documente (se bifează automat după OCR)</legend>
+          <div class="row">
+            <div>
+              <label><input id="doc_cerere" type="checkbox" disabled> Cerere tip ajutor social</label>
+              <label><input id="doc_ci" type="checkbox" disabled> CI solicitant</label>
+              <label><input id="doc_venit" type="checkbox" disabled> Dovezi venit (adeverințe/cupoane)</label>
+              <label><input id="doc_locuire" type="checkbox" disabled> Dovadă locuire (contract, adeverință)</label>
+              <label><input id="doc_familie" type="checkbox" disabled> Acte familie (certificate copii/căsătorie)</label>
+              <label><input id="doc_iban" type="checkbox" disabled> Extras cont (IBAN)</label>
+            </div>
+            <div>
+              <input id="file" type="file" />
+              <div style="display:flex; gap:8px; margin-top:8px;">
+                <select id="docHint">
+                  <option value="auto" selected>auto</option>
+                  <option value="cerere_ajutor">cerere_ajutor</option>
+                  <option value="carte_identitate">carte_identitate</option>
+                  <option value="acte_venit">acte_venit</option>
+                  <option value="acte_locuire">acte_locuire</option>
+                  <option value="acte_familie">acte_familie</option>
+                  <option value="cont_bancar">cont_bancar</option>
+                </select>
+                <button id="btnUpload" type="button" disabled>Încarcă</button>
+              </div>
+              <div id="uploads_list" class="muted" style="margin-top:8px"></div>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="row">
+          <button id="btnValidate" type="button">Validează</button>
+          <button id="btnCreateCase" type="button">Creează dosarul & rezervă</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="chat-col">
+    {% set chat_mode = 'user' %}
+    {% include "_chat_widget.html" with context %}
+  </aside>
+</div>
+
+<script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  const sid = params.get('sid') || "{{ sid }}";
+  print(sid)
+
+  const el = {
+    locSelect:   document.getElementById('loc'),
+    slotSelect:  document.getElementById('slot'),
+    btnUseSlot:  document.getElementById('btnUseSlot'),
+    slotPicked:  document.getElementById('slotPicked'),
+    gate:        document.getElementById('gate'),
+    cnp:         document.getElementById('cnp'),
+    telefon:     document.getElementById('telefon'),
+    nume:        document.getElementById('nume'),
+    prenume:     document.getElementById('prenume'),
+    email:       document.getElementById('email'),
+    adresa:      document.getElementById('adresa'),
+    elig:        document.getElementById('elig'),
+    program:     document.getElementById('program'),
+    valMsg:      document.getElementById('valMsg'),
+    file:        document.getElementById('file'),
+    hint:        document.getElementById('docHint'),
+    btnUpload:   document.getElementById('btnUpload'),
+    uploads_list:document.getElementById('uploads_list'),
+    btnValidate: document.getElementById('btnValidate'),
+    btnCreate:   document.getElementById('btnCreateCase'),
+  };
+
+  // OCR truth (programmatically toggles checkboxes; inputs are disabled)
+  const recognizedKinds = new Set();
+  const gate = el.gate;
+
+  function setGate(open) {
+    if (open) {
+      gate.classList.remove('dim');
+      el.btnUpload.disabled = false;
+    } else {
+      gate.classList.add('dim');
+      el.btnUpload.disabled = true;
+    }
+  }
+
+  function renderSlotOptions(sel, slots) {
+    sel.innerHTML = '';
+
+    for (const s of slots) {
+        const o = document.createElement('option');
+        o.value = s.id;
+        o.textContent = `${s.when} - ${s.location_id}`;
+        sel.appendChild(o);
+    }
+  }
+
+  async function fetchAndRenderSlots(locationId) {
+    const r = await fetch(`/api/slots-social?location_id=${encodeURIComponent(locationId)}`);
+    const slots = await r.json();
+    renderSlotOptions(el.slotSelect, slots);
+    if (el.slotSelect.options.length > 0 && !el.slotSelect.value) {
+      el.slotSelect.value = el.slotSelect.options[0].value;
+    }
+  }
+
+  async function refreshDocsFromOCR(){
+    const r = await fetch(`/local/uploads?session_id=${encodeURIComponent(sid)}`);
+    if(!r.ok) return;
+    const j = await r.json();
+    recognizedKinds.clear();
+    (j.recognized || []).forEach(k => recognizedKinds.add(k));
+    // Tick read-only boxes based on OCR
+    document.getElementById('doc_cerere').checked = recognizedKinds.has('cerere_ajutor');
+    document.getElementById('doc_ci').checked     = recognizedKinds.has('carte_identitate');
+    document.getElementById('doc_venit').checked  = recognizedKinds.has('acte_venit');
+    document.getElementById('doc_locuire').checked= recognizedKinds.has('acte_locuire');
+    document.getElementById('doc_familie').checked= recognizedKinds.has('acte_familie');
+    document.getElementById('doc_iban').checked   = recognizedKinds.has('cont_bancar');
+
+    const items = j.items || [];
+    el.uploads_list.innerHTML = items.length
+      ? items.map(it => `<div style="margin:4px 0">${it.filename} ${it.kind?`[${it.kind}]`:''}</div>`).join('')
+      : '<em>Niciun fișier încărcat.</em>';
+  }
+
+  async function uploadDoc(){
+    const f = el.file.files[0];
+    if(!f){ alert('Alege un fișier'); return; }
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('kind_hint', el.hint.value || 'auto');
+    fd.append('sid', sid);
+    const r = await fetch(`/local/uploads`, { method:'POST', body: fd });
+    if(!r.ok){ alert('Eroare upload'); return; }
+    el.file.value = '';
+    await refreshDocsFromOCR();
+  }
+
+  function makeDocsFromOCR(){
+    const docs = [];
+    if (recognizedKinds.has('cerere_ajutor')) docs.push({kind:'cerere_ajutor', status:'ok'});
+    if (recognizedKinds.has('carte_identitate')) docs.push({kind:'carte_identitate', status:'ok'});
+    if (recognizedKinds.has('acte_venit')) docs.push({kind:'acte_venit', status:'ok'});
+    if (recognizedKinds.has('acte_locuire')) docs.push({kind:'acte_locuire', status:'ok'});
+    if (recognizedKinds.has('acte_familie')) docs.push({kind:'acte_familie', status:'ok'});
+    if (recognizedKinds.has('cont_bancar')) docs.push({kind:'cont_bancar', status:'ok'});
+    return docs;
+  }
+
+  function makePayload(){
+    return {
+      session_id: sid,
+      person: {
+        cnp: el.cnp.value.trim(), nume: el.nume.value.trim(), prenume: el.prenume.value.trim(),
+        email: el.email.value.trim(), telefon: el.telefon.value.trim(),
+        domiciliu: { adresa: el.adresa.value.trim(), docTip: null }
+      },
+      application: {
+        program: "AS",
+        eligibility_reason: el.elig.value,
+        docs: makeDocsFromOCR()
+      }
+    };
+  }
+
+  // Events
+  el.locSelect.onchange = async () => { await fetchAndRenderSlots(el.locSelect.value); };
+  el.btnUseSlot.onclick = () => {
+    const id = el.slotSelect.value;
+    if (!id) { alert('Alege mai întâi un slot'); return; }
+    const opt = el.slotSelect.selectedOptions[0];
+    const chosen = { id, when: opt ? opt.textContent : '', location_id: el.locSelect.value, sid };
+    setGate(true);
+    el.slotPicked.textContent = `Selectat: ${chosen.when} @ ${chosen.location_id}`;
+    try { sessionStorage.setItem('preselected_slot', JSON.stringify(chosen)); } catch(_) {}
+  };
+  el.btnUpload.onclick = uploadDoc;
+
+  el.btnValidate.onclick = async () => {
+    if (el.gate.classList.contains('dim')) { alert('Alege un slot mai întâi'); return; }
+    const payload = makePayload();
+    const r = await fetch('/api/validate-social', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const j = await r.json();
+    el.valMsg.classList.remove('hidden');
+
+    if (!j.valid) {
+      el.valMsg.className = 'err';
+      el.valMsg.textContent = (j.errors || []).join(' • ');
+      return;
+    }
+    if (j.missing && j.missing.length) {
+      el.valMsg.className = 'err';
+      el.valMsg.innerHTML = `Lipsește: ${j.missing.join(', ')}`;
+      return;
+    }
+    // success -> go to confirmation
+    el.valMsg.className = 'ok';
+    el.valMsg.textContent = 'Validare reușită. Mergem la confirmare…';
+
+    sessionStorage.setItem('last_decided_type', 'AS');
+    const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
+    const qp = ps ? `&appt_when=${encodeURIComponent(ps.when||'')}&appt_loc=${encodeURIComponent(ps.location_id||'')}` : '';
+    setTimeout(()=>{ window.location.href = `/confirm-social?sid=${encodeURIComponent(sid)}${qp}`; }, 400);
+  };
+
+  el.btnCreate.onclick = async () => {
+    if (el.gate.classList.contains('dim')) { alert('Alege un slot mai întâi'); return; }
+    // Create case (program=AS)
+    const payload = makePayload();
+    const r1 = await fetch('/api/create_case_social', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const caseRes = await r1.json();
+    // Reserve chosen slot (LOCAL social)
+    const slot_id = el.slotSelect.value;
+    const r2 = await fetch('/api/schedule-social', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+      slot_id, cnp: payload.person.cnp
+    })});
+    const sch = await r2.json();
+    const a = (sch && sch.appointment) ? sch.appointment : null;
+    if (a) { try { sessionStorage.setItem('last_appt', JSON.stringify(a)); } catch(_) {} }
+    // Go to confirmation
+    const qp = a ? `&appt_when=${encodeURIComponent(a.when||'')}&appt_loc=${encodeURIComponent(a.location_id||'')}` : '';
+    setTimeout(()=>{ window.location.href = `/confirm-social?sid=${encodeURIComponent(sid)}${qp}`; }, 400);
+  };
+
+  // Init
+  document.addEventListener('DOMContentLoaded', async () => {
+    await fetchAndRenderSlots(el.locSelect.value);
+    await refreshDocsFromOCR();
+    setGate(false);
+    try {
+      const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
+      if (ps && ps.sid === sid) {
+        el.locSelect.value = ps.location_id || el.locSelect.value;
+        el.slotSelect.value = ps.id || el.slotSelect.value;
+        el.slotPicked.textContent = `Selectat: ${ps.when || ''} @ ${ps.location_id || ''}`;
+        setGate(true);
+      }
+    } catch(_) {}
+  });
+})();
+</script>
+</body>
+</html>

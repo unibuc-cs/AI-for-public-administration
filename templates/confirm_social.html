@@ -1,0 +1,111 @@
+<!-- templates/confirm_social.html -->
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8"/>
+  <title>Confirmare – Ajutor social</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root { --main: 1fr; --rail: minmax(280px, 30%); }
+    html, body { height: 100%; }
+    body{ margin:0; padding:16px; font:14px/1.45 system-ui,Arial; background:#f8f9fb; color:#222 }
+    .two-col{ display:grid; grid-template-columns: var(--main) var(--rail); gap:16px; align-items:start }
+    @media (max-width: 900px){ .two-col{ grid-template-columns:1fr } }
+    aside.chat-col{ position:sticky; top:16px; height:calc(100vh - 32px); overflow:auto }
+    .card{ background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px }
+    .muted{ color:#666 } .ok{ color:#0a7f2e }
+    .grid{ display:grid; grid-template-columns:180px 1fr; gap:8px 16px; align-items:start }
+    .list{ margin:6px 0 0 0; padding-left:18px }
+    .row{ margin:8px 0 } button{ padding:8px 12px; border-radius:8px; border:1px solid #aaa; background:#fff; cursor:pointer }
+  </style>
+</head>
+<body>
+  <div class="two-col">
+    <main>
+      <div class="card">
+        <h1>Confirmare cerere – Ajutor social</h1>
+        <div class="grid">
+          <div>Program</div><div><strong>AS</strong></div>
+          <div>Documente (OCR)</div><div id="docList"><em>Se încarcă…</em></div>
+          <div>Reamintire</div><div class="muted">La prezentare, adu documentele în original.</div>
+          <div>Programare</div><div id="appt"><em>Încă nu ai o programare. Folosește chatul (dreapta) pentru rezervare.</em></div>
+        </div>
+        <div class="row"><button id="btnConfirm">Confirmă și închide</button></div>
+      </div>
+    </main>
+    <aside class="chat-col">
+      {% set chat_mode = 'user' %}
+      {% include "_chat_widget.html" with context %}
+    </aside>
+  </div>
+
+  <script>
+  (function(){
+    const params = new URLSearchParams(location.search);
+    const sid = params.get('sid') || "{{ sid }}";
+    const apptWhenQP = params.get('appt_when');
+    const apptLocQP  = params.get('appt_loc');
+
+    const el = {
+      docList: document.getElementById('docList'),
+      appt: document.getElementById('appt'),
+      btnConfirm: document.getElementById('btnConfirm')
+    };
+
+    function showAppt(a, label='Programare') {
+      el.appt.innerHTML = `<span class="ok">${label}: ${a.when || ''} @ ${a.location_id || ''}</span>`;
+    }
+
+    async function loadOCR(){
+      const r = await fetch(`/local/uploads?session_id=${encodeURIComponent(sid)}`);
+      if(!r.ok){ el.docList.innerHTML = '<em>Eroare la încărcare</em>'; return; }
+      const j = await r.json();
+      const kinds = j.recognized || [];
+      el.docList.innerHTML = kinds.length ? '<ul class="list">' + kinds.map(k=>`<li>${k}</li>`).join('') + '</ul>'
+                                          : '<em>Niciun document</em>';
+    }
+
+    // 1) Prefer query params (if we came directly from reservation)
+    if (apptWhenQP || apptLocQP) showAppt({ when: apptWhenQP, location_id: apptLocQP });
+    else {
+      // 2) Real reservation
+      try {
+        const a = JSON.parse(sessionStorage.getItem('last_appt') || 'null');
+        if (a && (a.when || a.location_id)) showAppt(a);
+        else {
+          // 3) Preselected-only slot (not reserved yet)
+          const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
+          if (ps && (ps.when || ps.location_id)) showAppt(ps, 'Slot ales (rezervare în curs)');
+        }
+      } catch(_) {}
+    }
+
+    window.addEventListener('chat-steps', (ev) => {
+      const { steps } = ev.detail || {};
+      if (!Array.isArray(steps)) return;
+      for (const step of steps) {
+        if (step.scheduling) {
+          const a = step.scheduling.appointment || {};
+          showAppt(a);
+          try { sessionStorage.setItem('last_appt', JSON.stringify(a)); } catch(_) {}
+        }
+      }
+    });
+
+    el.btnConfirm.onclick = async () => {
+      try { await fetch('/api/session/reset', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sid }) }); } catch(_){}
+      try { await fetch(`/local/uploads/purge?session_id=${encodeURIComponent(sid)}`, { method:'DELETE' }); } catch(_){}
+      try {
+        sessionStorage.removeItem('last_appt');
+        sessionStorage.removeItem('preselected_slot');
+        sessionStorage.removeItem('chat:greeted:'+sid);
+      } catch(_){}
+      const newSid = 'chat-' + Math.random().toString(36).slice(2,10);
+      location.href = `/?sid=${encodeURIComponent(newSid)}`;
+    };
+
+    loadOCR();
+  })();
+  </script>
+</body>
+</html>

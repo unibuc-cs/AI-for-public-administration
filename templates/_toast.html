@@ -1,0 +1,36 @@
+<!-- templates/_toast.html -->
+<style>
+  .toast-wrap{position:fixed; top:16px; right:16px; z-index:9999; display:flex; flex-direction:column; gap:8px}
+  .toast{min-width:260px; max-width:420px; background:#fff; border:1px solid #ddd; border-left:6px solid #888;
+         border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,0.08); padding:10px 12px; font:14px/1.35 system-ui,Arial}
+  .toast.info{border-left-color:#3b82f6}
+  .toast.ok{border-left-color:#16a34a}
+  .toast.warn{border-left-color:#d97706}
+  .toast.err{border-left-color:#dc2626}
+  .toast .t-close{float:right; cursor:pointer; color:#777}
+  .toast .t-title{font-weight:600; margin-bottom:2px}
+  .toast .t-msg{white-space:pre-wrap}
+</style>
+
+<div id="toast-wrap" class="toast-wrap"></div>
+
+<script>
+(function(){
+  const wrap = document.getElementById('toast-wrap');
+  function makeToast({title,msg,type='info',ttl=4000}){
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.innerHTML = `<span class="t-close" aria-label="close">✕</span>
+                    ${title ? `<div class="t-title">${title}</div>`:''}
+                    <div class="t-msg">${msg||''}</div>`;
+    wrap.appendChild(el);
+    const close = () => { el.style.opacity = '0'; setTimeout(()=>el.remove(), 250); };
+    el.querySelector('.t-close').onclick = close;
+    if(ttl>0) setTimeout(close, ttl);
+  }
+  // global helper
+  window.toast = function(msg, type='info', title=''){
+    makeToast({title, msg, type});
+  };
+})();
+</script>

@@ -1,0 +1,30 @@
+@"
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# ---- Virtual envs ----
+.venv/
+venv/
+env/
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+
+# ---- dotenv ----
+.env
+
+# ---- Editors/OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- OneDrive temp files ----
+~$*
+"@ | Set-Content .gitignore

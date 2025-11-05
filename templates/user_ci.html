@@ -1,0 +1,573 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ app_title }} – CI Form</title>
+    <style>
+      :root { --rail: 1fr; --main: 4fr; }
+      html, body { height: 100%; }
+      body{ font-family:system-ui,Arial; margin:0; padding:16px; background:#f8f9fb; color:#222; }
+      .two-col { display:grid; grid-template-columns: var(--main) var(--rail); gap:16px; align-items:start; }
+      @media (max-width: 990px){ .two-col{ grid-template-columns: 1fr; } }
+      main .card, fieldset{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:14px; }
+      fieldset{ margin-bottom:16px; }
+      label{ display:block; margin-top:8px }
+      input,select,button{ padding:8px; border-radius:8px; border:1px solid #ccc; width:100% }
+      .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
+      .ok{ color:#0a7f2e } .err{ color:#b00 } .muted{ color:#666; font-size:12px } .hidden{ display:none }
+      img.thumb{ height:48px; border:1px solid #ddd; border-radius:6px; margin-right:8px }
+      aside.chat-col { position: sticky; top: 16px; height: calc(100vh - 32px); overflow:auto; }
+      .dim { opacity:.45; pointer-events:none; filter: grayscale(40%); }
+    </style>
+</head>
+<body>
+    {% include "_toast.html" %}
+
+      <div class="two-col">
+          <main>
+              <h1>{{ app_title }} – Create CI</h1>
+              <p class="muted">Session: <span id="sidSpan"></span></p>
+
+              <!-- Appointment -->
+                <fieldset id="slotsBox">
+                  <legend>Choose appointment (required before filling the form)</legend>
+                  <div class="row">
+                    <div>
+                      <label>Location
+                        <select id="loc">
+                          <option value="Bucuresti-S1">Bucuresti-S1</option>
+                          <option value="Ilfov-01">Ilfov-01</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div>
+                      <label>Slots
+                        <select id="slot"></select>
+                      </label>
+                    </div>
+                  </div>
+                  <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+                    <button id="btnUseSlot" type="button">Use this slot</button>
+                    <span class="muted">This only unlocks the form. The slot will be reserved later.</span>
+                  </div>
+                  <div id="slotPicked" class="muted" style="margin-top:8px"></div>
+                </fieldset>
+
+              <div id="gate" class="dim">
+                  <!-- Person info -->
+                  <fieldset>
+                    <legend>Person</legend>
+                    <div class="row">
+                      <div>
+                        <label>CNP <input id="cnp" placeholder="1860903226868"></label>
+                        <label>Nume <input id="nume" placeholder="Alin"></label>
+                        <label>Prenume <input id="prenume" placeholder="Stefanescu"></label>
+                        <label>Email <input id="email" placeholder="alin@fmi.unibuc.ro" type="email"></label>
+                        <label>Telefon <input id="telefon" placeholder="0754770829"></label>
+                      </div>
+                      <div>
+                        <label>Adresă <input id="adresa" placeholder="Bucuresti, sector 1, Str. Academiei nr 14, Fac. Matematica Informatica"></label>
+                        <label>Doc. Domiciliu
+                          <select id="docTip">
+                            <option value="extrasCF">extrasCF</option>
+                            <option value="contract">contract</option>
+                            <option value="adeverinta">adeverinta</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                  </fieldset>
+
+                  <!-- Application -->
+                  <fieldset>
+                    <legend>Application</legend>
+                    <div class="row">
+                      <div>
+                        <label>Type
+                          <select id="type">
+                            <option value="auto">auto (decide by eligibility)</option>
+                            <option value="CEI">Carte electronica de identitate</option>
+                            <option value="CIS">Carte de identitate simpla</option>
+                            <option value="CIP">Carte de identitate provizorie</option>
+                          </select>
+                        </label>
+                        <label>Eligibility
+                          <select id="elig">
+                            <option value="EXP_60">Expiră ≤60 zile</option>
+                            <option value="AGE_14">Varsta 14 ani</option>
+                            <option value="CHANGE">Schimbare date</option>
+                            <option value="LOSS">pierdut/furat)</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div>
+                        <label>Documents provided (toggle to ✓):</label>
+                        <label><input id="doc_cert" type="checkbox" disabled> Certificat de naștere</label>
+                        <label><input id="doc_ci"   type="checkbox" disabled> CI veche</label>
+                        <label><input id="doc_addr" type="checkbox" disabled> Dovadă adresă</label>
+                      </div>
+                    </div>
+                    <div id="valMsg" class="muted hidden"></div>
+                    <div style="margin-top:12px;">
+                      <button id="btnValidate">Validate</button>
+                    </div>
+                  </fieldset>
+
+                  <!-- Upload documents -->
+                  <fieldset>
+                    <legend>Upload documents</legend>
+                    <p class="muted">Accepted: PDF / JPG / PNG (max {{ MAX_UPLOAD_MB or 10 }} MB)</p>
+
+                    <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap">
+                      <div style="flex:2">
+                        <label>File
+                          <input type="file" id="file" />
+                        </label>
+                      </div>
+                      <div style="flex:1">
+                        <label>Kind hint (optional)
+                          <select id="kind_hint">
+                            <option value="auto">auto (let OCR decide)</option>
+                            <option value="cert_nastere">certificat naștere</option>
+                            <option value="ci_veche">CI veche</option>
+                            <option value="dovada_adresa">dovadă adresă</option>
+                            <option value="politie">dovadă poliție</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div>
+                        <button id="btnUpload" type="button">Upload</button>
+                      </div>
+                    </div>
+
+                    <div id="uploads_list" class="muted" style="margin-top:10px"></div>
+                  </fieldset>
+              </div> <!-- /gate -->
+
+          </main>
+
+          <aside class="chat-col">
+              {% set chat_mode = 'user' %}
+              {% include "_chat_widget.html" with context %}
+          </aside>
+      </div>
+</body>
+
+<script>
+const qs = new URLSearchParams(location.search);
+const sid = qs.get('sid') || 'form-' + Math.random().toString(36).slice(2,8);
+document.getElementById('sidSpan').textContent = sid;
+
+// Fix microseconds like 2025-10-19T04:29:49.510815Z (JS Date only supports ms)
+function isoToDate(iso) {
+  const s = String(iso).replace(
+    /(\.\d{3})\d+(Z|[+-]\d{2}:\d{2})$/,
+    '$1$2'
+  );
+  return new Date(s);
+}
+
+function formatWhen(iso, {
+  locale = 'ro-RO',
+  timeZone = 'Europe/Bucharest'
+} = {}) {
+  const d = isoToDate(iso);
+  // dd.mm.yyyy, HH:MM (24h)
+  return new Intl.DateTimeFormat(locale, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone
+  }).format(d);
+}
+
+
+/* Cache DOM refs explicitly (no implicit globals) */
+const $ = (id) => document.getElementById(id);
+const el = {
+  cnp: $('cnp'), nume: $('nume'), prenume: $('prenume'),
+  email: $('email'), telefon: $('telefon'), adresa: $('adresa'),
+  docTip: $('docTip'),
+  type: $('type'), elig: $('elig'),
+  doc_cert: $('doc_cert'), doc_ci: $('doc_ci'), doc_addr: $('doc_addr'),
+  file: $('file'), kind_hint: $('kind_hint'),
+  uploads_list: $('uploads_list'),
+  btnUpload: $('btnUpload'), btnValidate: $('btnValidate'),
+  slotsBox: $('slotsBox'), valMsg: $('valMsg'),
+  locSelect: $('loc'), slotSelect: $('slot'),
+  btnCreateCase: $('btnCreateCase'), result: $('result')
+};
+
+/* Defaults (used last) */
+const defaults = {
+  cnp: "1860903226868",
+  nume: "Alin",
+  prenume: "Stefanescu",
+  email: "alin@fmi.unibuc.ro",
+  telefon: "0754770829",
+  adresa: "Bucuresti, sector 1, Str. Academiei nr 14, Fac. Matematica Informatica",
+  docTip: "contract"
+};
+
+/* Apply values to inputs/selects */
+function setVal(elm, val){
+  if(!elm || val == null) return;
+  if(elm.tagName === 'SELECT'){
+    const exists = Array.from(elm.options).some(o => o.value === val);
+    if(exists) elm.value = val;
+  } else {
+    elm.value = String(val);
+  }
+}
+
+const prefill = defaults; // extend with URL/API/localStorage if desired
+setVal(el.cnp, prefill.cnp);
+setVal(el.nume, prefill.nume);
+setVal(el.prenume, prefill.prenume);
+setVal(el.email, prefill.email);
+setVal(el.telefon, prefill.telefon);
+setVal(el.adresa, prefill.adresa);
+setVal(el.docTip, prefill.docTip);
+
+/* Keep uploaded docs and recognized kinds */
+const uploadedKinds = new Set();
+const uploadItems = [];
+
+/* Render uploaded list */
+function renderUploads(items){
+  const box = el.uploads_list;
+  if(!items || !items.length){
+    box.innerHTML = '<em>No files uploaded yet.</em>';
+    return;
+  }
+  box.innerHTML = items.map(it=>{
+    const img = it.thumb ? `<img src="${it.thumb}" class="thumb">` : '';
+    const ocr = it.ocr?.kind ? `[${it.ocr.kind}]` : '';
+    const open = it.path ? `<a href="${it.path}" target="_blank">open</a>` : '';
+    return `<div style="display:flex;align-items:center;margin:4px 0">${img}<span>${it.name} ${ocr} ${open}</span></div>`;
+  }).join('');
+}
+
+/* Upload document with session awareness */
+async function uploadDoc(){
+  const f = el.file.files?.[0];
+  const hint = el.kind_hint.value;
+  if(!f){ alert('Choose a file first.'); return; }
+  if(f.size > (10 * 1024 * 1024)){ alert('File too large (>10 MB).'); return; }
+
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('kind_hint', hint);
+  fd.append('sid', sid);
+
+  const resp = await fetch('/upload', { method:'POST', body: fd });
+  if(!resp.ok){ alert('Upload failed: ' + await resp.text()); return; }
+
+  const j = await resp.json();
+
+  // After successful upload, DO NOT tick any boxes here.
+  // Just refresh OCR state from server.
+  await refreshDocsFromOCR();
+  el.btnValidate.click();
+  el.file.value = '';
+}
+
+
+/* Build payload */
+function makePayload(){
+  const docs = [];
+  if (recognizedKinds.has('cert_nastere')) docs.push({kind:'cert_nastere', status:'ok'});
+  if (recognizedKinds.has('ci_veche'))     docs.push({kind:'ci_veche', status:'ok'});
+  if (recognizedKinds.has('dovada_adresa'))docs.push({kind:'dovada_adresa', status:'ok'});
+
+  return {
+    session_id: sid,
+    person: {
+      cnp: el.cnp.value.trim(), nume: el.nume.value.trim(), prenume: el.prenume.value.trim(),
+      email: el.email.value.trim(), telefon: el.telefon.value.trim(),
+      domiciliu: { adresa: el.adresa.value.trim(), docTip: el.docTip.value }
+    },
+    application:
+        { type: el.type.value, // CEI / CIS / CIP
+            program: 'CI',
+            eligibility_reason:
+            el.elig.value, docs }
+  };
+}
+
+function renderSlotOptions(selectEl, slots, { withLocation = false } = {}) {
+  // keep current selection if still present
+  const prev = selectEl.value;
+  selectEl.innerHTML = '';
+
+  if (!Array.isArray(slots) || slots.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '— no slots —';
+    selectEl.appendChild(opt);
+    selectEl.disabled = true;
+    return;
+  }
+
+  selectEl.disabled = false;
+
+  for (const s of slots) {
+    const o = document.createElement('option');
+    o.value = s.id;
+    o.textContent = withLocation
+      ? `${formatWhen(s.when)} — ${s.location_id}`
+      : formatWhen(s.when);
+    selectEl.appendChild(o);
+  }
+
+  // restore selection if possible
+  if (prev && [...selectEl.options].some(o => o.value === prev)) {
+    selectEl.value = prev;
+  }
+}
+
+/* Set the gate for entering things */
+const gate = document.getElementById('gate');
+const slotPicked = document.getElementById('slotPicked');
+const btnUseSlot = document.getElementById('btnUseSlot');
+
+function setGate(open) {
+  if (open) gate.classList.remove('dim');
+  else gate.classList.add('dim');
+}
+
+/* Render slot options (you already have renderSlotOptions) */
+async function fetchAndRenderSlots(locationId) {
+  const r = await fetch(`/api/slots?location_id=${encodeURIComponent(locationId)}`);
+  const slots = await r.json();
+  renderSlotOptions(el.slotSelect, slots, { withLocation: false });
+  // preselect the first slot for convenience
+  if (el.slotSelect.options.length > 0 && !el.slotSelect.value) {
+    el.slotSelect.value = el.slotSelect.options[0].value;
+  }
+}
+
+/* Validate form */
+el.btnValidate.onclick = async () => {
+
+    if (gate.classList.contains('dim')) {
+      toast?.('Please pick a slot first.', 'warn', 'Appointment required');
+      return;
+        }
+
+  const payload = makePayload();
+  const r = await fetch('/api/validate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const j = await r.json();
+
+
+
+  el.valMsg.classList.remove('hidden');
+
+  if (!j.valid) {
+    el.valMsg.className = 'err';
+    el.valMsg.textContent = (j.errors || []).join(' • ');
+    el.slotsBox.classList.add('hidden');
+    return;
+  }
+
+  const base = `OK. Recommended type: ${j.decided_type}.`;
+  const missing = Array.isArray(j.missing) ? j.missing : [];
+  if (missing.length) {
+    el.valMsg.className = 'err';
+    el.valMsg.innerHTML = base + `<div class="err" style="margin-top:6px">Missing: ${missing.join(', ')}</div>`;
+    el.slotsBox.classList.add('hidden');
+    return;
+  }
+
+  // No missing docs -> we’re done with this form, go to confirmation.
+  el.valMsg.className = 'ok';
+  el.valMsg.textContent = base + ' Mergem la confirmare…';
+
+  // Keep a small hint for the chat widget (optional #4)
+  sessionStorage.setItem('last_decided_type', j.decided_type);
+
+  // Redirect to confirmation (do NOT reset here; reset happens on Confirm)
+  const target = `/confirm-ci?sid=${encodeURIComponent(sid)}&decided=${encodeURIComponent(j.decided_type)}`
+    + (() => {
+      try {
+        const a = JSON.parse(sessionStorage.getItem('last_appt') || 'null');
+        if (a && (a.when || a.location_id)) {
+          const qp = `&appt_when=${encodeURIComponent(a.when||'')}&appt_loc=${encodeURIComponent(a.location_id||'')}`;
+          return qp;
+        }
+      } catch(_) {}
+      const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
+      if (ps && (ps.when || ps.location_id)) {
+        return `&appt_when=${encodeURIComponent(ps.when||'')}&appt_loc=${encodeURIComponent(ps.location_id||'')}`;
+      }
+      return '';
+    })();
+    setTimeout(() => { window.location.href = target; }, 400);
+};
+
+
+
+/* Create case & schedule */
+el.btnCreateCase.onclick = async ()=>{
+    const payload=makePayload();
+    const slotid=el.slotSelect.value;
+    const rc=await fetch('/api/create_case',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const c=await rc.json();
+    if(!c.case_id){ el.result.textContent=JSON.stringify(c); return; }
+    const rs=await fetch('/api/schedule',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({apptype:payload.application.type,slot_id:slotid,case_id:c.case_id})});
+    const s=await rs.json();
+    el.result.textContent=`Case ${c.case_id} scheduled: ${JSON.stringify(s)}`;
+
+    const a = (s && s.appointment) ? s.appointment : null;
+    if (a) {
+      try { sessionStorage.setItem('last_appt', JSON.stringify(a)); } catch(_) {}
+    }
+};
+
+el.btnUpload.onclick = uploadDoc;
+
+/* --- Chat ↔ Form bridge: consume chat steps to update UI --- */
+function highlightMissing(missing) {
+  el.valMsg.classList.remove('hidden');
+  if (missing && missing.length) {
+    el.valMsg.className = 'err';
+    el.valMsg.innerHTML = 'Lipsesc documente: ' + missing.join(', ');
+  } else {
+    el.valMsg.className = 'ok';
+    el.valMsg.textContent = 'Toate documentele sunt în regulă.';
+  }
+  // DO NOT tick/untick checkboxes here — OCR owns truth.
+}
+
+async function renderSlotsFromStep(slots) {
+  if (!Array.isArray(slots)) return;
+  el.slotsBox.classList.remove('hidden');
+  renderSlotOptions(el.slotSelect, slots, { withLocation:false });
+}
+
+function showSchedulingResult(s) {
+  el.result.textContent = 'Programare: ' + JSON.stringify(s);
+}
+
+window.addEventListener('chat-steps', (ev) => {
+  const { steps } = ev.detail || {};
+  if (!Array.isArray(steps)) return;
+
+  for (const step of steps) {
+    if (step.missing) {
+      const list = step.missing;
+      if (list.length) {
+        toast(`Mai lipsesc: ${list.join(', ')}`, 'warn', 'Documente lipsă');
+      } else {
+        toast('Toate documentele sunt în regulă.', 'ok', 'Validare');
+      }
+      // keep your existing UI highlights if you already do them:
+      if (typeof highlightMissing === 'function') highlightMissing(list);
+    }
+    if (step.eligibility) {
+      // optional small hint
+      const t = step.eligibility.decided_type || 'auto';
+      toast(`Tip recomandat: ${t}`, 'info', 'Eligibilitate');
+    }
+    if (step.slots) {
+      toast(`Am găsit ${step.slots.length} sloturi`, 'info', 'Programări');
+      if (typeof renderSlotsFromStep === 'function') renderSlotsFromStep(step.slots);
+    }
+    if (step.scheduling) {
+      const a = step.scheduling.appointment || {};
+      toast(`${a.when || ''} @ ${a.location_id || ''}`, 'ok', 'Programare creată');
+      if (typeof showSchedulingResult === 'function') showSchedulingResult(step.scheduling);
+    }
+    if (step.toast) {
+      // generic toast from backend sugar (explained below)
+      const t = step.toast;
+      toast(t.msg || '', t.type || 'info', t.title || '');
+    }
+  }
+});
+
+// ------------------ OCR / Upload integration ------------------
+/* Keep OCR-recognized kinds ONLY (source of truth) */
+  const recognizedKinds = new Set();
+
+// Also refresh recognized docs after each upload (in case OCR ran server-side)
+async function refreshDocsFromOCR(){
+  const sid = new URLSearchParams(location.search).get('sid') || "{{ sid }}";
+  const r = await fetch(`/local/uploads?session_id=${encodeURIComponent(sid)}`);
+  if(!r.ok) return;
+  const j = await r.json();
+
+  // 1) Update OCR truth set
+  recognizedKinds.clear();
+  (j.recognized || []).forEach(k => recognizedKinds.add(k));
+
+  toast(`OCR found ${recognizedKinds.size} document(s)`, 'info', 'OCR Update');
+
+  // 2) Check the disabled checkboxes based ONLY on OCR
+  el.doc_cert.checked = recognizedKinds.has('cert_nastere');
+  el.doc_ci.checked   = recognizedKinds.has('ci_veche');
+  el.doc_addr.checked = recognizedKinds.has('dovada_adresa');
+
+  // 3) Render the upload list from server items
+  const items = j.items || [];
+  el.uploads_list.innerHTML = items.length
+    ? items.map(it => {
+        const ocrBadge = it.kind ? `[${it.kind}]` : '';
+        return `<div style="margin:4px 0">${it.filename} ${ocrBadge}</div>`;
+      }).join('')
+    : '<em>No files uploaded yet.</em>';
+}
+
+/* Change location -> reload slots */
+el.locSelect.onchange = async () => {
+  await fetchAndRenderSlots(el.locSelect.value);
+};
+
+/* Use slot = unlock form (no reservation yet) */
+btnUseSlot.onclick = () => {
+  const id = el.slotSelect.value;
+  if (!id) { alert('Choose a slot first'); return; }
+  const opt = el.slotSelect.selectedOptions[0];
+  // Build a lightweight object for display + later use
+  const chosen = {
+    id,
+    when: opt ? opt.textContent : '',
+    location_id: el.locSelect.value,
+    sid
+  };
+  setGate(true);
+  slotPicked.textContent = `Selected: ${chosen.when} @ ${chosen.location_id}`;
+  try { sessionStorage.setItem('preselected_slot', JSON.stringify(chosen)); } catch(_) {}
+};
+
+
+/* On load: show slots and keep form LOCKED */
+document.addEventListener('DOMContentLoaded', async () => {
+    await refreshDocsFromOCR();
+    await fetchAndRenderSlots(el.locSelect.value);
+    setGate(false); // locked at start
+    // If user had a preselected slot (coming back), reflect it
+    try {
+    const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
+    if (ps && ps.sid === sid) {
+      el.locSelect.value = ps.location_id || el.locSelect.value;
+      el.slotSelect.value = ps.id || el.slotSelect.value;
+      slotPicked.textContent = `Selected: ${ps.when || ''} @ ${ps.location_id || ''}`;
+      setGate(true);
+    }
+    } catch(_) {}
+});
+
+</script>
+
+
+</body>
+</html>

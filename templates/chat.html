@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ app_title }} – Chat</title>
+  <style>
+    body{font-family:system-ui,Arial;margin:32px;max-width:900px}
+    #log{white-space:pre-wrap;border:1px solid #ddd;padding:12px;border-radius:8px;min-height:280px}
+    textarea,input,button{padding:10px;border-radius:8px;border:1px solid #ccc}
+    textarea{width:100%;height:120px}
+    .row{margin:10px 0}
+    .muted{color:#666;font-size:12px}
+    .badge{background:#eef;padding:2px 8px;border-radius:10px}
+  </style>
+</head>
+<body>
+  <h1>{{ app_title }} – Chat</h1>
+  <p class="muted">Tip: spune “Vreau să-mi fac o carte de identitate nouă.”</p>
+
+  <div id="log"></div>
+
+  <div class="row">
+    <textarea id="msg" placeholder="Scrie mesajul tău...">Vreau ajutor social</textarea>
+  </div>
+  <div class="row">
+    <input id="sid" placeholder="session_id" value="chat-1" />
+    <button onclick="send()">Trimite</button>
+  </div>
+
+<script>
+    /*Vreau să-mi fac o carte de identitate nouă.*/
+/* --- Safe helpers: escape HTML, then linkify URL-like tokens --- */
+function escapeHTML(s){
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/* Turns http(s)://... and root-relative /path?query into clickable <a> */
+function linkify(s){
+  // First escape everything, so we only inject <a> we control:
+  const esc = escapeHTML(s);
+
+  // Regex 1: absolute URLs
+  const abs = esc.replace(
+    /\bhttps?:\/\/[^\s<>"']+/gi,
+    (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`
+  );
+
+  // Regex 2: root-relative links like /user-ci?sid=...
+  const rel = abs.replace(
+    /(^|[\s(])((\/[A-Za-z0-9._~\-\/?#[\]@!$&'()*+,;=%]+))/g,
+    (_, pre, path) => `${pre}<a href="${path}">${path}</a>`
+  );
+
+  // Turn /user-ci?... anchors into a button-styled anchor
+  const userCiBtn = rel.replace(
+    /<a href="(\/user-ci[^"]*)">[^<]*<\/a>/g,
+    (_, href) => `<a href="${href}" style="display:inline-block;padding:6px 10px;border:1px solid #888;border-radius:6px;text-decoration:none;">Open CI form</a>`
+  );
+  return userCiBtn;
+
+}
+
+/* Append a message line to the log using HTML (not textContent) */
+function appendMessage(prefix, text){
+  const log = document.getElementById('log');
+  const html = `<div><strong>${escapeHTML(prefix)}:</strong> ${linkify(text)}</div>`;
+  log.insertAdjacentHTML('beforeend', html);
+  // Optional: auto-scroll
+  log.scrollTop = log.scrollHeight;
+}
+
+async function send(){
+  const sid = document.getElementById('sid').value || 'chat';
+  const msg = (document.getElementById('msg').value || '').trim();
+  if(!msg){ return; }
+
+  appendMessage("You", msg);
+
+  const r = await fetch('/api/chat', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ session_id: sid, message: msg })
+  });
+
+  // Best-effort parse; if server returns non-JSON on error, show raw text
+  let j, raw;
+  try { j = await r.json(); }
+  catch(e){ raw = await r.text(); }
+
+  const botReply = j?.reply || raw || "(no reply)";
+  appendMessage("Bot", botReply);
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,292 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Operator – CEI/CIS/CIP/AS</title>
+  <style>
+    :root { --main: 1fr; --rail: minmax(280px, 30%); }
+    .two-col { display:grid; grid-template-columns: var(--main) var(--rail); gap:16px; align-items:start; }
+    html, body { height: 100%; }
+    body{ font-family:system-ui,Arial; margin:0; padding:16px; background:#f8f9fb; color:#222; }
+    @media (max-width: 900px){ .two-col{ grid-template-columns: 1fr; } }
+    main .card, fieldset{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:14px; }
+    fieldset{ margin-bottom:16px; }
+    label{ display:block; margin-top:8px }
+    input,select,button,textarea{ padding:8px; border-radius:8px; border:1px solid #ccc; width:100% }
+    .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
+    .ok{ color:#0a7f2e } .err{ color:#b00 } .muted{ color:#666; font-size:12px } .hidden{ display:none }
+    aside.chat-col { position: sticky; top: 16px; height: calc(100vh - 32px); overflow:auto; }
+    .stack form{ margin:6px 0 }
+    table{ width:100%; border-collapse:collapse }
+    th,td{ padding:8px; border-bottom:1px solid #eee; text-align:left }
+  </style>
+</head>
+<body>
+  {% include "_toast.html" %}
+
+  <div class="two-col">
+    <main>
+      <div class="flex" style="display:flex;justify-content:space-between;align-items:center">
+        <h1>📋 Operator UI</h1>
+        <div>
+          Utilizator: {{ user.name or user.email }} |
+          <a href="/logout">Logout</a>
+        </div>
+      </div>
+
+      <p><a href="/">← Chat public</a></p>
+
+      <h3>Sloturi disponibile (Bucuresti-S1)</h3>
+      <div id="slots" class="muted">Se încarcă…</div>
+      <h3>Dosare</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Case ID</th><th>Tip</th><th>Status</th><th>Persoană</th><th>Acțiuni</th>
+          </tr>
+        </thead>
+        <tbody id="casesBody">
+            {% if cases and cases|length > 0 %}
+              {% for c in cases %}
+              <tr>
+                <td>{{ c.case_id }}</td>
+                <td>{{ c.type }}</td>
+                <td>{{ c.status }}</td>
+                <td class="small">
+                  {{ (c.person or {}).nume }} {{ (c.person or {}).prenume }}<br>
+                  {{ (c.person or {}).email }}
+                </td>
+                <td class="stack">
+                  <form method="post" action="/operator/advance">
+                    <input type="hidden" name="case_id" value="{{ c.case_id }}"/>
+                    <select name="next_status">
+                      <option>SCHEDULED</option>
+                      <option>IN_PROCESS</option>
+                      <option>READY_FOR_PICKUP</option>
+                      <option>CLOSED</option>
+                    </select>
+                    <button type="submit">Schimbă status</button>
+                  </form>
+                  <form method="post" action="/operator/reschedule">
+                    <input type="hidden" name="case_id" value="{{ c.case_id }}"/>
+                    <input name="appt_id" placeholder="appt_id (din /api/chat)" />
+                    <select name="slot_id" id="slot-{{ c.case_id }}"></select>
+                    <button type="submit">Reschedule CEI</button>
+                  </form>
+                  <form method="post" action="/operator/cancel">
+                    <input type="hidden" name="case_id" value="{{ c.case_id }}"/>
+                    <input name="appt_id" placeholder="appt_id"/>
+                    <button type="submit">Cancel appt</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+              {% else %}
+                <tr><td colspan="6" class="muted">No tasks.</td></tr>
+              {% endif %}
+        </tbody>
+      </table>
+
+      <h3>HITL Tasks</h3>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Case</th><th>Kind</th><th>Status</th><th>Assignee</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="tasksBody">
+          {% set tlist = (tasks or []) | selectattr('id') | list %}
+          {% if tlist and tlist|length > 0 %}
+            {% for t in tlist %}
+            <tr>
+              <td>{{ t.id }}</td>
+              <td>{{ t.case_id }}</td>
+              <td>{{ t.kind }}</td>
+              <td>{{ t.status }}</td>
+              <td>{{ t.assignee or "-" }}</td>
+              <td class="stack">
+                <form method="post" action="/operator/tasks/claim">
+                  <input type="hidden" name="task_id" value="{{ t.id }}"/>
+                  <button type="submit">Claim</button>
+                </form>
+                <form method="post" action="/operator/tasks/done">
+                  <input type="hidden" name="task_id" value="{{ t.id }}"/>
+                  <textarea name="notes" placeholder="notes"></textarea>
+                  <button type="submit">Mark DONE</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="6" class="muted">No tasks.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </main>
+
+    <aside class="chat-col">
+      {% set chat_mode = 'operator' %}
+      {% include "_chat_widget.html" with context %}
+    </aside>
+  </div>
+
+<script>
+function ensureDebug(){
+  let dbg = document.getElementById('debug-log');
+  if(!dbg){
+    dbg = document.createElement('div');
+    dbg.id = 'debug-log';
+    dbg.className = 'muted';
+    dbg.style.whiteSpace = 'pre-wrap';
+    dbg.style.margin = '8px 0 16px';
+    dbg.textContent = 'Debug log:';
+    document.body.insertBefore(dbg, document.body.firstChild);
+  }
+  return dbg;
+}
+function logDebug(msg){
+  const dbg = ensureDebug();
+  const line = document.createElement('div');
+  const ts = new Date().toISOString();
+  line.textContent = `[${ts}] ${msg}`;
+  dbg.appendChild(line);
+}
+
+function renderCases(cases){
+  const tbody = document.getElementById('casesBody');
+  if(!tbody) return;
+
+  const list = (Array.isArray(cases) ? cases : []).filter(t => t && t.case_id != null);
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="muted">No cases.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(t => `
+    <tr>
+      <td>${c.case_id}</td>
+      <td>${c.type || '-'}</td>
+      <td>${c.status}</td>
+      <td class="small">
+        ${(c.person?.nume||'')} ${(c.person?.prenume||'')}<br>
+        ${(c.person?.email||'')}
+      </td>
+      <td class="stack">
+        <form method="post" action="/operator/advance">
+          <input type="hidden" name="case_id" value="${c.case_id}"/>
+          <select name="next_status">
+            <option>SCHEDULED</option>
+            <option>IN_PROCESS</option>
+            <option>READY_FOR_PICKUP</option>
+            <option>CLOSED</option>
+          </select>
+          <button type="submit">Schimbă status</button>
+        </form>
+        <form method="post" action="/operator/reschedule">
+          <input type="hidden" name="case_id" value="${c.case_id}"/>
+          <input name="appt_id" placeholder="appt_id (din /api/chat)"/>
+          <select name="slot_id" id="slot-${c.case_id}"></select>
+          <button type="submit">Reschedule CEI</button>
+        </form>
+        <form method="post" action="/operator/cancel">
+          <input type="hidden" name="case_id" value="${c.case_id}"/>
+          <input name="appt_id" placeholder="appt_id"/>
+          <button type="submit">Cancel appt</button>
+        </form>
+      </td>
+    </tr>
+  `).join('');
+
+  // populate the per-row slot selects (from last fetched slots)
+  if (window.__lastSlots) {
+    const selects = [...document.querySelectorAll('select[id^=slot-]')];
+    selects.forEach(sel => {
+      sel.innerHTML = "";
+      window.__lastSlots.forEach(s => {
+        const o = document.createElement('option');
+        o.value = s.id; o.textContent = s.when + " @ " + s.location_id;
+        sel.appendChild(o);
+      });
+    });
+  }
+}
+
+function renderTasks(tasks){
+  const tbody = document.getElementById('tasksBody');
+  if(!tbody) return;
+  const list = (Array.isArray(tasks) ? tasks : []).filter(t => t && t.id != null);
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="muted">No tasks.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(t => `
+    <tr>
+      <td>${t.id}</td>
+      <td>${t.case_id}</td>
+      <td>${t.kind}</td>
+      <td>${t.status}</td>
+      <td>${t.assignee || '-'}</td>
+      <td class="stack">
+        <form method="post" action="/operator/tasks/claim">
+          <input type="hidden" name="task_id" value="${t.id}"/>
+          <button type="submit">Claim</button>
+        </form>
+        <form method="post" action="/operator/tasks/done">
+          <input type="hidden" name="task_id" value="${t.id}"/>
+          <textarea name="notes" placeholder="notes"></textarea>
+          <button type="submit">Mark DONE</button>
+        </form>
+      </td>
+    </tr>
+  `).join('');
+}
+
+window.addEventListener('chat-steps', (ev) => {
+  const { steps } = ev.detail || {};
+  if (!Array.isArray(steps)) return;
+  for (const step of steps) {
+    if (step.cases)   { renderCases(step.cases); toast(`S-au actualizat ${step.cases.length} dosare`, 'info', 'Dosare'); }
+    if (step.tasks)   { renderTasks(step.tasks); toast(`S-au actualizat ${step.tasks.length} task-uri`, 'info', 'Task-uri'); }
+    if (step.advance) { toast('Status dosar actualizat', 'ok', 'Avansare'); }
+    if (step.reschedule) {
+      const a = step.reschedule.appointment || {};
+      toast(`${a.when || ''} @ ${a.location_id || ''}`, 'ok', 'Reprogramat');
+    }
+    if (step.cancel)  { toast('Programare anulată', 'warn', 'Anulare'); }
+    if (step.slots)   { window.__lastSlots = step.slots; toast(`Sloturi primite: ${step.slots.length}`, 'info', 'Sloturi'); }
+    if (step.toast)   { const t = step.toast; toast(t.msg || '', t.type || 'info', t.title || ''); }
+  }
+});
+
+async function loadSlots(){
+  logDebug('Fetching /operator/slots');
+  const r = await fetch('/operator/slots');
+  if(!r.ok){
+    logDebug('Error loading slots: ' + r.status);
+    document.getElementById('slots').textContent = "Error loading slots: " + r.status;
+    return;
+  }
+  const slots = await r.json();
+  window.__lastSlots = slots;
+  // const div = document.getElementById('slots');
+  // div.innerHTML = '';
+  // const pre = document.createElement('pre');
+  // pre.className='muted';
+  // pre.textContent = JSON.stringify(slots.slice(0,8), null, 2);
+  // div.appendChild(pre);
+
+  // populate selects that exist at first render
+  const selects = [...document.querySelectorAll('select[id^=slot-]')];
+  selects.forEach(sel => {
+    sel.innerHTML = "";
+    slots.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.id; o.textContent = s.when + " @ " + s.location_id;
+      sel.appendChild(o);
+    });
+  });
+}
+
+loadSlots();
+</script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!-- templates/confirm_ci.html -->
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8"/>
+  <title>Confirmare cerere CI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body{margin:0;padding:16px;font:14px/1.45 system-ui,Arial;background:#f8f9fb;color:#222}
+    h1{font-size:18px;margin:0 0 12px}
+    .two-col{display:grid;grid-template-columns:4fr 1fr;gap:16px}
+    @media (max-width: 1200px){ .two-col{grid-template-columns:1fr} }
+    aside.chat-col{position:sticky;top:16px;height:calc(100vh - 32px)}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px}
+    .muted{color:#666}
+    .ok{color:#0a7f2e}
+    .warn{color:#a36200}
+    .grid{display:grid;grid-template-columns:180px 1fr;gap:8px 16px;align-items:start}
+    .list{margin:6px 0 0 0;padding-left:18px}
+    .row{margin:8px 0}
+    button{padding:8px 12px;border-radius:8px;border:1px solid #aaa;background:#fff;cursor:pointer}
+  </style>
+</head>
+<body>
+  <div class="two-col">
+    <main>
+      <div class="card">
+        <h1>Confirmare cerere carte de identitate</h1>
+        <div class="grid">
+          <div>Tip recomandat</div>
+          <div><strong id="decided">{{ decided }}</strong></div>
+
+          <div>Documente identificate (OCR)</div>
+          <div id="docList"><em>Se încarcă…</em></div>
+
+          <div>Reamintire</div>
+          <div class="muted">La prezentarea la ghișeu adu documentele în original. Dacă lipsește ceva, vei primi instrucțiuni în chat.</div>
+
+          <div>Programare</div>
+          <div id="appt">
+            <em>Încă nu ai o programare. Deschide chat-ul (dreapta) și spune <strong>„arată sloturi”</strong>, apoi <strong>„programează slot &lt;id&gt;”</strong>.</em>
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="btnConfirm">Confirmă și închide</button>
+        </div>
+      </div>
+    </main>
+
+    <aside class="chat-col">
+      {% set chat_mode = 'user' %}
+      {% include "_chat_widget.html" with context %}
+    </aside>
+  </div>
+
+  <script>
+  (function(){
+    const params = new URLSearchParams(location.search);
+    const sid = params.get('sid') || "{{ sid }}";
+
+    // Get any pre-filled appointment info from query params (if any)
+    const apptWhenQP = params.get('appt_when');
+    const apptLocQP  = params.get('appt_loc');
+
+    const el = {
+      decided: document.getElementById('decided'),
+      docList: document.getElementById('docList'),
+      appt: document.getElementById('appt'),
+      btnConfirm: document.getElementById('btnConfirm')
+    };
+
+    function showAppt(a, label='Programare') {
+    el.appt.innerHTML = `<span class="ok">${label}: ${a.when || ''} @ ${a.location_id || ''}</span>`;
+  }
+    // 1) If explicit query params exist, prefer those
+    if (apptWhenQP || apptLocQP) {
+    showAppt({ when: apptWhenQP, location_id: apptLocQP });
+    } else {
+    // 2) Try a real reservation saved earlier
+    try {
+      const a = JSON.parse(sessionStorage.getItem('last_appt') || 'null');
+      if (a && (a.when || a.location_id)) {
+        showAppt(a);
+      } else {
+        // 3) Fall back to preselected (not yet reserved)
+        const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
+        if (ps && (ps.when || ps.location_id)) {
+          showAppt(ps, 'Slot ales (urmează să fie rezervat)');
+        }
+      }
+    } catch(_) {}
+    }
+
+    // Load OCR-recognized docs for this session
+    async function loadOCR(){
+      const r = await fetch(`/local/uploads?session_id=${encodeURIComponent(sid)}`);
+      if(!r.ok){ el.docList.innerHTML = '<em>Eroare la încărcare</em>'; return; }
+      const j = await r.json();
+      const kinds = j.recognized || [];
+      if(!kinds.length){ el.docList.innerHTML = '<em>Niciun document încărcat</em>'; return; }
+      el.docList.innerHTML = '<ul class="list">' + kinds.map(k => `<li>${k}</li>`).join('') + '</ul>';
+    }
+
+    // Listen to chat-steps for scheduling info and show the appointment
+    window.addEventListener('chat-steps', (ev) => {
+      const { steps } = ev.detail || {};
+      if (!Array.isArray(steps)) return;
+      for (const step of steps) {
+        if (step.scheduling) {
+          const a = step.scheduling.appointment || {};
+          el.appt.innerHTML = `<span class="ok"> Programare: ${a.when || ''} @ ${a.location_id || ''}</span>`;
+          try {
+            sessionStorage.setItem('last_appt', JSON.stringify(a));
+          } catch(_) {}
+        }
+      }
+    });
+
+    // Also load any saved appointment (e.g., if chat scheduled earlier)
+    try {
+      const a = JSON.parse(sessionStorage.getItem('last_appt') || 'null');
+      if (a && (a.when || a.location_id)) {
+        el.appt.innerHTML = `<span class="ok"> Programare: ${a.when || ''} @ ${a.location_id || ''}</span>`;
+      }
+    } catch(_) {}
+
+    // Confirm button: reset everything and return to a fresh chat
+    el.btnConfirm.onclick = async () => {
+      // server: reset chat + FSM
+      try { await fetch('/api/session/reset', { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ sid }) }); } catch(_){}
+
+      // server: purge OCR uploads
+      try { await fetch(`/local/uploads/purge?session_id=${encodeURIComponent(sid)}`, { method:'DELETE' }); } catch(_){}
+
+      // client: clear local hints
+      try {
+        sessionStorage.removeItem('last_appt');
+        sessionStorage.removeItem('chat:greeted:'+sid);
+      } catch(_){}
+
+      // go to a brand-new chat with a NEW sid
+      const newSid = 'chat-' + Math.random().toString(36).slice(2,10);
+      location.href = `/?sid=${encodeURIComponent(newSid)}`;
+    };
+
+    loadOCR();
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!-- templates/_chat_widget.html -->
+<style>
+  .chat-card{border:1px solid #ddd;border-radius:12px;background:#fff;display:flex;flex-direction:column;height:100%}
+  .chat-head{padding:10px;background:#f7f7fb;border-bottom:1px solid #eee;font-weight:600}
+  .chat-log{white-space:pre-wrap;flex:1;overflow:auto;padding:10px}
+  .chat-controls{display:flex;gap:8px;padding:10px;border-top:1px solid #eee}
+  .chat-controls textarea{flex:1;min-height:60px;padding:8px;border-radius:8px;border:1px solid #ccc}
+  .chat-controls button{padding:8px 12px;border-radius:8px;border:1px solid #aaa;cursor:pointer;background:#fff}
+  .muted{color:#666;font-size:12px}
+</style>
+
+<div class="chat-card">
+  <div class="chat-head">💬 Asistent <span class="muted" style="float:right">sid: {{ sid }}</span></div>
+  <div id="chat-log" class="chat-log"></div>
+  <div class="chat-controls">
+    <textarea id="chat-msg" placeholder="Scrie un mesaj…"></textarea>
+    <button type="button" onclick="chatSend()">Trimite</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  // Identify session + mode
+  const sidParam = new URLSearchParams(location.search).get('sid');
+  const sidTpl = "{{ sid|default('chat-'+ range(1000,9999)|random|string) }}";
+  const sid = sidParam || sidTpl;
+  window.__CHAT_SID__ = sid;
+
+  // Mode: user vs operator
+  const tplMode = "{{ chat_mode|default('user') }}";
+  const mode = (tplMode && tplMode !== 'None') ? tplMode :
+               (sid.startsWith('op-') ? 'operator' : 'user');
+
+  function escapeHTML(s){ return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  function append(role, msg){
+    const log = document.getElementById('chat-log');
+    const line = document.createElement('div');
+    line.innerHTML = `<strong>${escapeHTML(role)}:</strong> ${msg}`;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  window.chatSend = async function(){
+    const msgEl = document.getElementById('chat-msg');
+    const text = msgEl.value.trim();
+    if(!text) return;
+    append('Tu', escapeHTML(text));
+    msgEl.value='';
+    const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({session_id: sid, message: text})});
+    const j = await r.json();
+    append('Bot', escapeHTML(j.reply || '(no reply)'));
+
+    // Broadcast steps to host page (for toasts/UI updates)
+    if(j && Array.isArray(j.steps)){
+      window.dispatchEvent(new CustomEvent('chat-steps', { detail: { steps:j.steps, halted:j.halted } }));
+    }
+  }
+
+  // Greet once per session/tab
+  const greetKey = 'chat:greeted:'+sid;
+  if(!sessionStorage.getItem(greetKey)){
+    let greet;
+    if(mode==='operator'){
+      greet = 'Salut! Sunt asistentul pentru operator. Poți folosi comenzi ca: „list tasks”, „claim task 12”, „advance case CASE-1 la READY_FOR_PICKUP”.';
+    } else {
+      greet = 'Salut! Pot să te ghidez în proces. Intreaba daca ai nevoie de informatii sau ajutor.';
+    }
+    append('Bot', greet);
+    sessionStorage.setItem(greetKey,'1');
+  }
+
+    // 4: show a one-liner hint when the page opens with context kept in sessionStorage */
+    try {
+      const decided = sessionStorage.getItem('last_decided_type');
+      if (decided) {
+        const hint = (decided === 'CEI')
+          ? 'Validare completă — poți alege un slot sau mergi la pagina de confirmare.'
+          : 'Validare completă — mergi la pagina de confirmare.';
+        append('Bot', hint);
+        sessionStorage.removeItem('last_decided_type');
+      }
+    } catch(_) {}
+})();
+</script>

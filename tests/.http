@@ -1,0 +1,4 @@
+POST http://localhost:8000/api/chat
+Content-Type: application/json
+
+{ "session_id": "s1", "message": "Vreau să-mi fac o carte de identitate nouă." }
