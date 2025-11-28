@@ -1,8 +1,8 @@
 # This is the “router”. It looks at the user message and decides which domain agent should run next.
 from __future__ import annotations
 from typing import Any
-from base import Agent, AgentState
-from llm_utils import classify_intent_with_llm
+from .base import Agent, AgentState
+from .llm_utils import classify_intent_with_llm
 
 
 USE_LLM = False  # TODO: set to True to use LLM for intent detection

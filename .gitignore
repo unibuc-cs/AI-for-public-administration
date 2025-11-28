@@ -25,6 +25,7 @@ env/
 .DS_Store
 Thumbs.db
 
+
 # ---- OneDrive temp files ----
 ~$*
 "@ | Set-Content .gitignore

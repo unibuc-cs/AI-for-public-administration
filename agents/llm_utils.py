@@ -15,13 +15,14 @@ You must classify the user's message into ONE of these intents:
 - operator    : when the user asks about tasks, cases, backoffice actions
 - help        : anything else
 
-Extract useful entities if they appear: cnp, email, slot_id.
+Extract useful entities if they appear: name, cnp, email, slot_id.
 
 Return ONLY JSON with this schema:
 {
   "intent": "ci" | "social" | "scheduling" | "operator" | "help",
   "subtype": string | null,
   "entities": {
+    "name": string | null,
     "slot_id": string | null,
     "cnp": string | null,
     "email": string | null
