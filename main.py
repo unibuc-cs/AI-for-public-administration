@@ -58,6 +58,15 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
+@app.get("/")
+def local_root():
+    return {
+        "ok": True,
+        "service": "primarie_local_mock",
+        "hint": "Try /docs, /cases, /tasks, /uploads, /slots-social",
+    }
+
+
 @app.on_event("startup")
 def _startup():
     """

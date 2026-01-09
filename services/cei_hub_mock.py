@@ -16,6 +16,15 @@ from db import engine, HubSlot, HubAppt, SocialSlot
 
 app = FastAPI(title="CEI-HUB-MAI (mock)")
 
+@app.get("/")
+def local_root():
+    return {
+        "ok": True,
+        "service": "HUB",
+        "hint": "Try /docs, /cases, /tasks, /uploads, /slots-hub"
+    }
+
+
 class Slot(BaseModel):
     """
     Serialized view of a HubSlot DB row (id fields renamed for clarity).
@@ -78,12 +87,21 @@ def _seed():
             for r in rows: s.add(r)
             s.commit()
 
+@app.get("/", tags=["home"])
+def home():
+    return {"message": "Hello primarie messa"}
+
 @app.on_event("startup")
 def startup_seed():
     # ensure tables exist (safe to call repeatedly)
     from db import init_db
     init_db()
     _seed()
+
+# Define a function to print
+def func():
+    for i in range(10):
+        print(i)
 
 @app.post("/admin/reseed")
 def admin_reseed():

@@ -86,8 +86,12 @@ def _doc_kinds_from_text(text: str) -> List[str]:
             found.append(kind)
     return list(sorted(set(found)))
 
+@local.get("/")
+def local_root():
+    return {"message": "Hello primarie messa"}
 
 # --------------------------- uploads (OCR) ---------------------------
+
 
 @local.post("/uploads")
 async def upload_file(
