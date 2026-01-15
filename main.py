@@ -21,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 from PIL import Image
 import httpx
 import uuid, json
-
+from debug_http import log_requests
 
 # Running mode: "mounted" (default) runs the mock services as separate processes,
 # "split" mounts them as sub-apps (easier for local testing, but not realistic).
@@ -49,8 +49,13 @@ LOCAL_URL = os.getenv("LOCAL_URL", _default_local)
 
 # Create main FastAPI app and include orchestrator API at /api/*
 app = FastAPI(title=APP_TITLE)
-app.include_router(orch_router, prefix="/api")
 
+
+
+
+
+app.include_router(orch_router, prefix="/api")
+#app.middleware("http")(log_requests)
 
 # Static files + server-side templates (Jinja2)
 os.makedirs("static/uploads/thumbs", exist_ok=True)
@@ -58,14 +63,15 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
-@app.get("/")
-def local_root():
-    return {
-        "ok": True,
-        "service": "primarie_local_mock",
-        "hint": "Try /docs, /cases, /tasks, /uploads, /slots-social",
-    }
-
+@app.middleware("http")
+async def log_upload_poller(request: Request, call_next):
+    if request.url.path.startswith("/local/uploads"):
+        ua = request.headers.get("user-agent", "-")
+        ref = request.headers.get("referer", "-")
+        origin = request.headers.get("origin", "-")
+        caller = request.headers.get("X-Caller", "-")
+        print(f"[UPLOADS] {request.method} {request.url} UA={ua} REF={ref} ORIGIN={origin} CALLER={caller}")
+    return await call_next(request)
 
 @app.on_event("startup")
 def _startup():
@@ -84,6 +90,12 @@ def _startup():
 
     print(f"[BOOT] RUN_MODE={RUN_MODE}  HUB_URL={HUB_URL}  LOCAL_URL={LOCAL_URL}")
 
+@app.get("/local-health")
+def local_health_hint():
+    return {
+        "ok": True,
+        "hint": "Try /local/docs, /local/cases, /local/tasks, /local/uploads, /local/slots-social"
+    }
 
 # ---------------------------- User ---------------------------
 

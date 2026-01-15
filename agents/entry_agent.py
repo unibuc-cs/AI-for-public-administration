@@ -1,86 +1,81 @@
-# This is the “router”. It looks at the user message and decides which domain agent should run next.
+# agents/entry_agent.py
+# Router agent: decides which domain agent runs next, or emits UI navigation steps.
+
 from __future__ import annotations
-from typing import Any
+from typing import Any, Dict
+
 from .base import Agent, AgentState
+from .settings import LLM_USE
+from .identifiers import allowed_intents
 from .llm_utils import classify_intent_with_llm
 
+_INTENTS = allowed_intents()
 
-USE_LLM = False  # TODO: set to True to use LLM for intent detection
+def _intent_from_text_fallback(text: str) -> str:
+    t = (text or "").lower()
+    if any(k in t for k in ["ajutor social", "social", "vmi", "venit minim", "benefici"]):
+        return "social"
+    if any(k in t for k in ["carte de identitate", "buletin", "ci", "c.i."]):
+        return "ci"
+    if any(k in t for k in ["operator", "task", "tasks", "case", "caz", "dosar"]):
+        return "operator"
+    return "unknown"
 
 class EntryAgent(Agent):
     name = "entry"
 
     async def handle(self, state: AgentState) -> AgentState:
-        text = state.get("message", "").lower()
+        text = state.get("message", "") or ""
+        sid = state.get("session_id", "") or ""
+        app = state.get("app") or {}
 
-        if not USE_LLM:
-            # detect intent (TODO: replace with LLM later)
-            if "ajutor social" in text or "venit de incluziune" in text or "as" == text.strip():
-                state["intent"] = "social"
-                state["next_agent"] = "social"
-            elif "carte de identitate" in text or "buletin" in text or "ci" in text:
-                state["intent"] = "ci"
-                state["next_agent"] = "ci"
-            elif "slot" in text or "program" in text:
-                state["intent"] = "schedule"
-                state["next_agent"] = "scheduling"
-            elif "task" in text or "dosar" in text or "operator" in text:
-                state["intent"] = "operator"
-                state["next_agent"] = "operator"
-            else:
-                # default help
-                state["reply"] = (
-                    "I can help with:\n"
-                    "- carte de identitate (CI)\n"
-                    "- ajutor social\n"
-                    "- operator (list tasks, list cases)\n"
-                    "- or say 'slot' to see appointments."
-                )
-                state["next_agent"] = None
-            return state
+        if isinstance(app, dict):
+            ui_context = (app.get("ui_context") or "public").lower()
         else:
-            # NOTES:
-            # - we keep the old regex as fallback (production-safe)
-            # - we enrich state with entities (slot_id, cnp),
-            # - we don’t hardcode “/user-ci” in the agent — UI still decides how to present it, based on steps.
-            text = state.get("message", "")
+            ui_context = (getattr(app, "ui_context") or "public").lower()
 
-            # 1) ask LLM
+        # 1) Decide intent (LLM if enabled; otherwise fallback)
+        intent = None
+        llm_meta: Dict[str, Any] = {}
+        if LLM_USE:
             try:
-                res = await classify_intent_with_llm(text)
-
-                # enforce sanity
-                intent = res.get("intent") or "help"
-                entities = res.get("entities") or {}
-                if "slot_id" not in entities:
-                    entities["slot_id"] = None
-
-                state["intent"] = intent
-                state["entities"] = entities
+                out = await classify_intent_with_llm(text)
+                cand = (out.get("intent") or "").strip().lower()
+                intent = cand if cand in _INTENTS else "unknown"
+                llm_meta = out if isinstance(out, dict) else {}
             except Exception:
-                # 2) fallback to keyword if LLM fails
-                low = text.lower()
-                if "ajutor social" in low:
-                    state["intent"] = "social"
-                elif "carte de identitate" in low or "buletin" in low or "ci" in low:
-                    state["intent"] = "ci"
-                else:
-                    state["intent"] = "help"
+                intent = None
 
-            # 3) map intent -> next agent
-            intent = state["intent"]
-            if intent == "ci":
-                state["next_agent"] = "ci"
-            elif intent == "social":
-                state["next_agent"] = "social"
-            elif intent == "scheduling":
-                state["next_agent"] = "scheduling"
-            elif intent == "operator":
-                state["next_agent"] = "operator"
-            else:
-                state["reply"] = (
-                    "I can help with CI, Social Aid, scheduling, or operator tasks. "
-                    "Tell me which flow you want."
-                )
-                state["next_agent"] = None
+        if not intent:
+            intent = _intent_from_text_fallback(text)
 
+        state.setdefault("steps", []).append({"intent": intent, "ui_context": ui_context, "llm": bool(LLM_USE and llm_meta)})
+
+        # 2) If we are on the PUBLIC chat, prefer navigation for CI / Social
+        if ui_context == "public" and intent in {"ci", "social"}:
+            url = f"/user-ci?sid={sid}" if intent == "ci" else f"/user-social?sid={sid}"
+            label = "Deschide formular CI" if intent == "ci" else "Deschide formular Ajutor Social"
+            state.setdefault("steps", []).append({"navigate": {"url": url, "label": label}})
+            # Keep reply simple; the widget will render as clickable link.
+            state["reply"] = f"Te pot ajuta. {label}: {url}"
+            state["next_agent"] = None
+            return state
+
+        # 3) Route to domain agents (useful on form pages, for doc-checking and guided Q&A)
+        if intent == "ci":
+            state["next_agent"] = "ci"
+            return state
+        if intent == "social":
+            state["next_agent"] = "social"
+            return state
+        if intent == "operator":
+            state["next_agent"] = "operator"
+            return state
+
+        state["reply"] = (
+            "Pot ajuta cu: carte de identitate (CI), ajutor social (VMI), "
+            "programări și întrebări de operator (task-uri/cazuri). "
+            "Spune-mi ce ai nevoie."
+        )
+        state["next_agent"] = None
+        return state

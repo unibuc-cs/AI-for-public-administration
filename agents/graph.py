@@ -37,7 +37,14 @@ async def run_agent_graph(initial_state: AgentState) -> AgentState:
 
     while current:
         agent = AGENTS[current]
+
+        # Clear next_agent before each step so stale values can't loop
+        state.pop("next_agent", None)
+
+        # Handle current state and agent
         state = await agent.handle(state)
+
+        # go to next specified agent
         current = state.get("next_agent")
 
     return state

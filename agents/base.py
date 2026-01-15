@@ -11,6 +11,7 @@ class AgentState(TypedDict, total=False):
     steps: List[Dict[str, Any]]
     intent: str
     next_agent: Optional[str]
+    return_to: Optional[str] # The agent to return
     reply: str
 
 

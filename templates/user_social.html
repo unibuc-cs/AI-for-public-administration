@@ -5,6 +5,7 @@
   <meta charset="utf-8"/>
   <title>Ajutor social – Formular</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  {% include "_toast.html" %}
   <style>
     :root { --main: 1fr; --rail: minmax(280px, 30%); }
     html, body { height: 100%; }
@@ -125,7 +126,8 @@
 
   <aside class="chat-col">
     {% set chat_mode = 'user' %}
-    {% include "_chat_widget.html" with context %}
+    {% set chat_context = 'social' %}
+              {% include "_chat_widget.html" with context %}
   </aside>
 </div>
 
@@ -133,7 +135,8 @@
 (function(){
   const params = new URLSearchParams(location.search);
   const sid = params.get('sid') || "{{ sid }}";
-  print(sid)
+  console.log("sid =", sid);
+
 
   const el = {
     locSelect:   document.getElementById('loc'),
@@ -192,7 +195,13 @@
     }
   }
 
+  let _ocrRefreshCount = 0;
+
   async function refreshDocsFromOCR(){
+      _ocrRefreshCount++;
+    console.log("refreshDocsFromOCR count =", _ocrRefreshCount);
+    console.trace("refreshDocsFromOCR called from:");
+
     const r = await fetch(`/local/uploads?session_id=${encodeURIComponent(sid)}`);
     if(!r.ok) return;
     const j = await r.json();
@@ -314,7 +323,7 @@
   // Init
   document.addEventListener('DOMContentLoaded', async () => {
     await fetchAndRenderSlots(el.locSelect.value);
-    await refreshDocsFromOCR();
+    // await refreshDocsFromOCR();
     setGate(false);
     try {
       const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
@@ -327,6 +336,31 @@
     } catch(_) {}
   });
 })();
+
+  // React to backend "steps" broadcast by the embedded chat widget.
+  window.addEventListener('chat-steps', (ev) => {
+    const { steps } = ev.detail || {};
+    if (!Array.isArray(steps)) return;
+    for (const step of steps) {
+      if (step.navigate?.url) {
+        toast(`<a href="${step.navigate.url}">${step.navigate.label || step.navigate.url}</a>`, 'info', 'Navigare');
+      }
+      if (step.missing) {
+        const list = step.missing || [];
+        if (list.length) toast(`Mai lipsesc: ${list.join(', ')}`, 'warn', 'Documente lipsă');
+        else toast('Toate documentele sunt în regulă.', 'ok', 'Validare');
+      }
+      if (step.slots) {
+        toast(`Am găsit ${step.slots.length} sloturi`, 'info', 'Programări');
+        try { renderSlotOptions(el.slotSelect, step.slots); } catch(_) {}
+      }
+      if (step.scheduling) {
+        const a = step.scheduling.appointment || {};
+        toast(`Programare creată: ${a.when || ''}`, 'ok', 'Confirmare');
+      }
+    }
+  });
+
 </script>
 </body>
 </html>

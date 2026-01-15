@@ -17,6 +17,7 @@ class SocialAgent(Agent):
 
         # if no docs, let doc-intake run
         if not app.get("docs"):
+            state["return_to"] = self.name
             state["next_agent"] = "doc_intake"
             return state
 

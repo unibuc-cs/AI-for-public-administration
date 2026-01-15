@@ -165,7 +165,8 @@ async def _recognized_docs_from_ocr(sid: str) -> list[dict]:
     try:
         async with httpx.AsyncClient() as client:
             j = (await client.get(f"{os.getenv('LOCAL_URL','http://127.0.0.1:8000/local')}/uploads",
-                                  params={"session_id": sid})).json()
+                                  params={"session_id": sid},
+                                  headers={"X-Caller": "orchestrator_recognized_docs_from_ocr"})).json()
         kinds = j.get("recognized", []) or []
         return [{"kind": k, "status": "ok"} for k in kinds]
     except Exception:

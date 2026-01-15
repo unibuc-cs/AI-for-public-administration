@@ -124,7 +124,9 @@
 
     <aside class="chat-col">
       {% set chat_mode = 'operator' %}
-      {% include "_chat_widget.html" with context %}
+      {% set chat_context = 'operator' %}
+        {% set chat_mode = 'operator' %}
+        {% include "_chat_widget.html" with context %}
     </aside>
   </div>
 
@@ -287,6 +289,18 @@ async function loadSlots(){
 }
 
 loadSlots();
+
+  // React to operator steps (claim/complete/advance) from the chat widget
+  window.addEventListener('chat-steps', (ev) => {
+    const { steps } = ev.detail || {};
+    if (!Array.isArray(steps)) return;
+    for (const step of steps) {
+      if (step.claim) toast(`Task revendicat: ${JSON.stringify(step.claim)}`, 'ok', 'Task');
+      if (step.complete) toast(`Task completat: ${JSON.stringify(step.complete)}`, 'ok', 'Task');
+      if (step.advance) toast(`Caz actualizat: ${JSON.stringify(step.advance)}`, 'ok', 'Caz');
+    }
+  });
+
 </script>
 </body>
 </html>

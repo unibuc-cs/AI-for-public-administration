@@ -9,14 +9,15 @@
 #
 # Uses the shared SQLite DB via SQLModel.
 from __future__ import annotations
-
+from fastapi import Request, Response
 import json
 import os
+import traceback
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, FastAPI
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 
@@ -31,7 +32,7 @@ from db import (
 # Ensure tables exist
 init_db()
 
-local = APIRouter(prefix="/local", tags=["local"])
+local = APIRouter(tags=["local"])
 
 
 # --------------------------- helpers ---------------------------
@@ -88,7 +89,8 @@ def _doc_kinds_from_text(text: str) -> List[str]:
 
 @local.get("/")
 def local_root():
-    return {"message": "Hello primarie messa"}
+    return {"ok": True,
+            "message": "Hello primarie messa"}
 
 # --------------------------- uploads (OCR) ---------------------------
 
@@ -143,7 +145,15 @@ async def upload_file(
 
 
 @local.get("/uploads")
-def list_uploads(session_id: str = Query(..., alias="session_id")):
+def list_uploads(request: Request, session_id: str = Query(..., alias="session_id")):
+    # DEBUG: show who calls this endpoint
+    ua = request.headers.get("user-agent", "-")
+    caller = request.headers.get("X-Caller", "-")
+    if "python-httpx" in ua:
+        print("\n[DEBUG] /local/uploads called by python-httpx. Stack:")
+        print("".join(traceback.format_stack(limit=25)))
+        print(f"[UPLOADS] caller: {caller}")
+
     with Session(engine) as s:
         rows = s.exec(select(UploadRec).where(UploadRec.session_id == session_id)).all()
     recognized = set()
@@ -283,6 +293,10 @@ def list_cases(type: Optional[str] = None):
 
 @local.patch("/cases/{case_id}")
 def update_case_status(case_id: str, status: str = Query(...)):
+    # Hard allowlist for demo safety & predictable operator UX.
+    allowed = {"NEW","SCHEDULED","IN_PROCESS","READY_FOR_PICKUP","CLOSED"}
+    if status not in allowed:
+        raise HTTPException(status_code=400, detail=f"invalid status: {status}")
     with Session(engine) as s:
         row = s.exec(select(Case).where(Case.case_id == case_id)).first()
         if not row:
@@ -350,3 +364,6 @@ def complete_task(task_id: int, payload: Dict[str, Any]):
         s.commit()
         s.refresh(t)
     return {"ok": True, "task": {"id": t.id, "status": t.status, "notes": t.notes}}
+
+app = FastAPI(title="Primarie local mock")
+app.include_router(local)

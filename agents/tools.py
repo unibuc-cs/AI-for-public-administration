@@ -16,8 +16,14 @@ import os, json
 import httpx
 
 # External service endpoints (mock servers)
-HUB_URL = os.getenv("HUB_URL", "http://localhost:8001")
-LOCAL_URL = os.getenv("LOCAL_URL", "http://localhost:8002")
+RUN_MODE = os.getenv("RUN_MODE", "mounted").lower()  # "mounted" | "split"
+_default_hub = "http://localhost:8000/hub" if RUN_MODE == "mounted" else "http://localhost:8001"
+_default_local = "http://localhost:8000/local" if RUN_MODE == "mounted" else "http://localhost:8002"
+HUB_URL = os.getenv("HUB_URL", _default_hub)
+LOCAL_URL = os.getenv("LOCAL_URL", _default_local)
+
+
+# External service endpoints (mock servers)
 
 
 # --------------------------- ELIGIBILITY & DOCS ---------------------------

@@ -19,6 +19,7 @@ class CIAgent(Agent):
         # if we don't have docs yet, try OCR first
         if not app.get("docs"):
             # let the doc-intake agent populate, then come back
+            state["return_to"] = self.name
             state["next_agent"] = "doc_intake"
             return state
 
@@ -26,6 +27,9 @@ class CIAgent(Agent):
         elig = tool_eligibility(app.get("eligibility_reason", CI_CFG["eligibility_reason"]))
         if (app.get("type") or "auto") == "auto":
             app["type"] = elig["decided_type"]
+
+        # Expose eligibility decision to the UI
+        state.setdefault("steps", []).append({"eligibility": elig})
 
         missing = tool_docs_missing(app["type"], app["docs"])["missing"]
         state["app"] = app
