@@ -34,6 +34,12 @@ class EntryAgent(Agent):
         else:
             ui_context = (getattr(app, "ui_context") or "public").lower()
 
+        # If we are already inside a specific wizard, route directly.
+        if ui_context in {"ci", "social", "operator"}:
+            state.setdefault("steps", []).append({"ui_context": ui_context, "route": ui_context})
+            state["next_agent"] = ui_context
+            return state
+
         # 1) Decide intent (LLM if enabled; otherwise fallback)
         intent = None
         llm_meta: Dict[str, Any] = {}
@@ -74,7 +80,7 @@ class EntryAgent(Agent):
 
         state["reply"] = (
             "Pot ajuta cu: carte de identitate (CI), ajutor social (VMI), "
-            "programări și întrebări de operator (task-uri/cazuri). "
+            "programari si intrebari de operator (task-uri/cazuri). "
             "Spune-mi ce ai nevoie."
         )
         state["next_agent"] = None

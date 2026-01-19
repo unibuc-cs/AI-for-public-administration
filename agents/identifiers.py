@@ -34,11 +34,19 @@ def allowed_case_statuses() -> Set[str]:
 def _load_checklist_docs(filename: str) -> List[str]:
     p = Path(__file__).parent / "checklists" / filename
     data = json.loads(p.read_text(encoding="utf-8"))
-    docs=set()
+    docs: Set[str] = set()
+
+    # CI checklist is structured by types -> required_docs.
     for _t, spec in (data.get("types") or {}).items():
         for d in (spec.get("required_docs") or []):
-            if isinstance(d, str):
+            if isinstance(d, str) and d:
                 docs.add(d)
+
+    # Social checklist may have top-level required_docs.
+    for d in (data.get("required_docs") or []):
+        if isinstance(d, str) and d:
+            docs.add(d)
+
     return sorted(docs)
 
 def allowed_ci_doc_ids() -> List[str]:

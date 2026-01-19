@@ -93,21 +93,16 @@
               <label><input id="doc_cerere" type="checkbox" disabled> Cerere tip ajutor social</label>
               <label><input id="doc_ci" type="checkbox" disabled> CI solicitant</label>
               <label><input id="doc_venit" type="checkbox" disabled> Dovezi venit (adeverințe/cupoane)</label>
-              <label><input id="doc_locuire" type="checkbox" disabled> Dovadă locuire (contract, adeverință)</label>
-              <label><input id="doc_familie" type="checkbox" disabled> Acte familie (certificate copii/căsătorie)</label>
-              <label><input id="doc_iban" type="checkbox" disabled> Extras cont (IBAN)</label>
-            </div>
+              <label><input id="doc_locuire" type="checkbox" disabled> Dovadă locuire (contract, adeverință)</label></div>
             <div>
               <input id="file" type="file" />
               <div style="display:flex; gap:8px; margin-top:8px;">
-                <select id="docHint">
-                  <option value="auto" selected>auto</option>
+                <select id="docHint" required>
+                  <option value="" selected disabled>Select tip</option>
                   <option value="cerere_ajutor">cerere_ajutor</option>
                   <option value="carte_identitate">carte_identitate</option>
                   <option value="acte_venit">acte_venit</option>
                   <option value="acte_locuire">acte_locuire</option>
-                  <option value="acte_familie">acte_familie</option>
-                  <option value="cont_bancar">cont_bancar</option>
                 </select>
                 <button id="btnUpload" type="button" disabled>Încarcă</button>
               </div>
@@ -202,7 +197,7 @@
     console.log("refreshDocsFromOCR count =", _ocrRefreshCount);
     console.trace("refreshDocsFromOCR called from:");
 
-    const r = await fetch(`/local/uploads?session_id=${encodeURIComponent(sid)}`);
+    const r = await fetch(`/uploads?session_id=${encodeURIComponent(sid)}`);
     if(!r.ok) return;
     const j = await r.json();
     recognizedKinds.clear();
@@ -212,8 +207,6 @@
     document.getElementById('doc_ci').checked     = recognizedKinds.has('carte_identitate');
     document.getElementById('doc_venit').checked  = recognizedKinds.has('acte_venit');
     document.getElementById('doc_locuire').checked= recognizedKinds.has('acte_locuire');
-    document.getElementById('doc_familie').checked= recognizedKinds.has('acte_familie');
-    document.getElementById('doc_iban').checked   = recognizedKinds.has('cont_bancar');
 
     const items = j.items || [];
     el.uploads_list.innerHTML = items.length
@@ -226,12 +219,18 @@
     if(!f){ alert('Alege un fișier'); return; }
     const fd = new FormData();
     fd.append('file', f);
-    fd.append('kind_hint', el.hint.value || 'auto');
+    const kind = (el.hint && el.hint.value) ? String(el.hint.value) : '';
+    if(!kind){ alert('Select document type.'); return; }
+    fd.append('kind_hint', kind);
     fd.append('sid', sid);
     const r = await fetch(`/local/uploads`, { method:'POST', body: fd });
     if(!r.ok){ alert('Eroare upload'); return; }
     el.file.value = '';
     await refreshDocsFromOCR();
+
+    if(window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+      window.ChatWidget.sendSystem('am incarcat documentele');
+    }
   }
 
   function makeDocsFromOCR(){
@@ -324,6 +323,10 @@
   document.addEventListener('DOMContentLoaded', async () => {
     await fetchAndRenderSlots(el.locSelect.value);
     // await refreshDocsFromOCR();
+
+    if(window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+      window.ChatWidget.sendSystem('am incarcat documentele');
+    }
     setGate(false);
     try {
       const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');

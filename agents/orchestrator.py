@@ -1,7 +1,7 @@
 # TODO: MOVE the operator operations to operator_agent. Similar possibly for others!
 
 """"
-Note: A2A architecture (graph.py). The “brain” no longer hardcodes all logic in one giant if.
+Note: A2A architecture (graph.py). The "brain" no longer hardcodes all logic in one giant if.
 
 Each agent is a small service that:
     1. reads the shared state
@@ -9,7 +9,7 @@ Each agent is a small service that:
     3. writes back to shared state
     4. tells who should run next (state["next_agent"] = "...")
 
-That’s agent-to-agent chaining — you can later move one of these agents into another process (MCP, separate FastAPI, LangServe) and keep the same pattern.
+That's agent-to-agent chaining - you can later move one of these agents into another process (MCP, separate FastAPI, LangServe) and keep the same pattern.
 """
 
 
@@ -26,7 +26,7 @@ That’s agent-to-agent chaining — you can later move one of these agents into
 
 """ PLAN:
 Chat: The /api/chat handler is place to plug in OpenAI (or LangChain/LangGraph)
-Parse intents (e.g., “start CI” → return link to /user-ci).
+Parse intents (e.g., "start CI" ? return link to /user-ci).
 Answer knowledge questions using RAG (agents/rag.py).
 Route to tool calls (validate/create/schedule).
 Agents / MCP: Each operation is already a tool (agents/tools.py). Wrapping them with MCP or LangChain Tools is straightforward: define tool schemas and call the same functions.
@@ -36,7 +36,7 @@ State: Keep the case creation separate from scheduling; rescheduling remains via
 import os, json
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from agents.graph import run_agent_graph
 import httpx
 import re
@@ -80,10 +80,10 @@ def _state(sid: str) -> Dict[str, Any]:
 def _doc_synonyms() -> Dict[str, str]:
     """Map user text tokens to canonical doc kinds used by tools."""
     return {
-        r"\b(certificat(?:ul)? de n(a|ă)stere|cert[ ._-]?nastere)\b": "cert_nastere",
+        r"\b(certificat(?:ul)? de n(a|a)stere|cert[ ._-]?nastere)\b": "cert_nastere",
         r"\b(ci(?: veche)?|buletin(?:ul)? vechi)\b": "ci_veche",
-        r"\b(dovad(a|ă) (?:de )?adres(a|ă)|extras(?:ul)? cf|contract(?:ul)?(?: de inchiriere)?)\b": "dovada_adresa",
-        r"\b(poli(t|ț)ie|furt|pierdere)\b": "politie",
+        r"\b(dovad(a|a) (?:de )?adres(a|a)|extras(?:ul)? cf|contract(?:ul)?(?: de inchiriere)?)\b": "dovada_adresa",
+        r"\b(poli(t|t)ie|furt|pierdere)\b": "politie",
     }
 
 
@@ -126,6 +126,7 @@ class Application(BaseModel):
     type: Optional[str] = None
     eligibility_reason: Optional[str] = None
     docs: List[Doc] = []
+    ui_context: Optional[str] = Field(default="public")
 
 
 class ChatIn(BaseModel):
@@ -161,7 +162,7 @@ def _toast_err(title: str, msg: str):
     return {"toast": {"title": title, "msg": msg, "type": "err"}}
 
 async def _recognized_docs_from_ocr(sid: str) -> list[dict]:
-    """Query Primărie /local/uploads and turn recognized kinds into doc list."""
+    """Query Primarie /local/uploads and turn recognized kinds into doc list."""
     try:
         async with httpx.AsyncClient() as client:
             j = (await client.get(f"{os.getenv('LOCAL_URL','http://127.0.0.1:8000/local')}/uploads",
@@ -178,8 +179,8 @@ async def chat_api(data: ChatIn):
     state = {
         "session_id": data.session_id,
         "message": data.message,
-        "person": data.person or {},
-        "app": data.application or {},
+        "person": (data.person.model_dump() if data.person else {}),
+        "app": (data.application.model_dump() if data.application else {}),
         "steps": [],
     }
     result = await run_agent_graph(state)
@@ -295,7 +296,7 @@ async def create_case_api(data: CreateCaseIn):
     person = data.person.model_dump()
     app = data.application.model_dump()
 
-    # if user selected “auto”, you decide before this point;
+    # if user selected "auto", you decide before this point;
     # here we just enforce that 'type' is actually present ("CEI", "CIS", "CIP")
     if not app.get("type"):
         # fallback to CEI or whatever your decision logic computed earlier

@@ -125,13 +125,12 @@
                         </label>
                       </div>
                       <div style="flex:1">
-                        <label>Kind hint (optional)
-                          <select id="kind_hint">
-                            <option value="auto">auto (let OCR decide)</option>
-                            <option value="cert_nastere">certificat naștere</option>
-                            <option value="ci_veche">CI veche</option>
-                            <option value="dovada_adresa">dovadă adresă</option>
-                            <option value="politie">dovadă poliție</option>
+                        <label>Tip document
+                          <select id="kind_hint" required>
+                            <option value="" selected disabled>Select tip</option>
+                            <option value="cert_nastere">cert_nastere</option>
+                            <option value="ci_veche">ci_veche</option>
+                            <option value="dovada_adresa">dovada_adresa</option>
                           </select>
                         </label>
                       </div>
@@ -272,6 +271,10 @@ async function uploadDoc(){
   // After successful upload, DO NOT tick any boxes here.
   // Just refresh OCR state from server.
   await refreshDocsFromOCR();
+
+  if(window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+    window.ChatWidget.sendSystem('am incarcat documentele');
+  }
   el.btnValidate.click();
   el.file.value = '';
 }
@@ -502,7 +505,7 @@ window.addEventListener('chat-steps', (ev) => {
 // Also refresh recognized docs after each upload (in case OCR ran server-side)
 async function refreshDocsFromOCR(){
   const sid = new URLSearchParams(location.search).get('sid') || "{{ sid }}";
-  const r = await fetch(`/local/uploads?session_id=${encodeURIComponent(sid)}`);
+  const r = await fetch(`/uploads?session_id=${encodeURIComponent(sid)}`);
   if(!r.ok) return;
   const j = await r.json();
 
@@ -553,6 +556,10 @@ btnUseSlot.onclick = () => {
 /* On load: show slots and keep form LOCKED */
 document.addEventListener('DOMContentLoaded', async () => {
     await refreshDocsFromOCR();
+
+  if(window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+    window.ChatWidget.sendSystem('am incarcat documentele');
+  }
     await fetchAndRenderSlots(el.locSelect.value);
     setGate(false); // locked at start
     // If user had a preselected slot (coming back), reflect it

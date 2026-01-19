@@ -1,0 +1,164 @@
+{# templates/_upload_widget.html
+
+Shared upload UI widget.
+
+Goals:
+  - UI uses only /upload (POST) and /uploads (GET)
+  - Emits a browser event "upload-updated" after every refresh
+  - Can be reused across many forms by setting a unique upload_prefix
+
+Template variables (all optional):
+  - sid: session id (usually passed by page)
+  - upload_prefix: string id prefix for DOM ids (default: "upl")
+  - upload_title: small title above controls
+  - upload_accept: input accept attribute (default: ".pdf,.png,.jpg,.jpeg")
+  - upload_kinds: list of {value,label} options for kind hint dropdown
+  - upload_button_label: button label (default: "Upload")
+  - upload_help: helper text under the controls
+
+Note: ASCII-only (no diacritics).
+#}
+
+{% set upload_prefix = upload_prefix|default('upl') %}
+{% set upload_title = upload_title|default('Documents') %}
+{% set upload_accept = upload_accept|default('.pdf,.png,.jpg,.jpeg') %}
+{% set upload_button_label = upload_button_label|default('Upload') %}
+{% set upload_help = upload_help|default('Accepted: PDF/JPG/PNG. OCR will detect document kind when possible.') %}
+
+<style>
+  .upl-shell{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; }
+  .upl-title{ font-weight:600; margin-bottom:8px; }
+  .upl-controls{ display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
+  .upl-controls > div{ min-width:180px; }
+  .upl-controls label{ display:block; font-size:13px; color:#374151; }
+  .upl-controls input[type="file"], .upl-controls select{ width:100%; padding:8px; border:1px solid #d1d5db; border-radius:10px; }
+  .upl-controls button{ height:40px; padding:0 16px; border-radius:10px; border:1px solid #d1d5db; background:#111827; color:#fff; font-weight:600; cursor:pointer; }
+  .upl-controls button:disabled{ opacity:.5; cursor:not-allowed; }
+  .upl-help{ margin-top:8px; font-size:12px; color:#6b7280; }
+  .upl-list{ margin-top:10px; font-size:13px; color:#374151; }
+  .upl-item{ margin:4px 0; display:flex; gap:8px; align-items:center; }
+  .upl-badge{ font-size:12px; padding:2px 8px; border:1px solid #e5e7eb; border-radius:999px; background:#f9fafb; color:#374151; }
+</style>
+
+<div class="upl-shell" id="{{ upload_prefix }}_shell" data-sid="{{ sid }}">
+  <div class="upl-title">{{ upload_title }}</div>
+
+  <div class="upl-controls">
+    <div style="flex:2">
+      <label>File
+        <input type="file" id="{{ upload_prefix }}_file" accept="{{ upload_accept }}" />
+      </label>
+    </div>
+
+    <div style="flex:1">
+      <label>Kind hint
+        <select id="{{ upload_prefix }}_hint">
+          <option value="auto" selected>auto</option>
+          {% for opt in (upload_kinds or []) %}
+            <option value="{{ opt.value }}">{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <div>
+      <button id="{{ upload_prefix }}_btn" type="button" {% if not _has_kinds %}disabled{% endif %}>{{ upload_button_label }}</button>
+    </div>
+  </div>
+
+  <div class="upl-help">{{ upload_help }}</div>
+
+  <div class="upl-list" id="{{ upload_prefix }}_list"><em>No files uploaded yet.</em></div>
+</div>
+
+<script>
+(function(){
+  const prefix = "{{ upload_prefix }}";
+  const HAS_KINDS = {{ 'true' if _has_kinds else 'false' }};
+  const shell = document.getElementById(prefix + "_shell");
+  const elFile = document.getElementById(prefix + "_file");
+  const elHint = document.getElementById(prefix + "_hint");
+  const elBtn  = document.getElementById(prefix + "_btn");
+  const elList = document.getElementById(prefix + "_list");
+
+  function getSid(){
+    const qs = new URLSearchParams(window.location.search);
+    const sidUrl = qs.get('sid');
+    const sidAttr = shell ? shell.getAttribute('data-sid') : null;
+    return sidUrl || sidAttr || 'anon';
+  }
+
+  function render(items){
+    if(!items || !items.length){
+      elList.innerHTML = '<em>No files uploaded yet.</em>';
+      return;
+    }
+    elList.innerHTML = items.map(function(it){
+      const fn = it.filename || it.name || '(file)';
+      const k = it.kind || (it.ocr && it.ocr.kind) || '';
+      const badge = k ? '<span class="upl-badge">' + k + '</span>' : '';
+      return '<div class="upl-item"><span>' + fn + '</span>' + badge + '</div>';
+    }).join('');
+  }
+
+  async function refresh(){
+    const sid = getSid();
+    const r = await fetch('/uploads?session_id=' + encodeURIComponent(sid), {
+      headers: { 'X-Caller': 'ui' }
+    });
+    if(!r.ok){
+      // Do not throw; keep widget usable.
+      elList.innerHTML = '<em>Could not load uploads.</em>';
+      return;
+    }
+    const j = await r.json();
+    const recognized = j.recognized || [];
+    const items = j.items || j.uploads || [];
+    render(items);
+
+    window.dispatchEvent(new CustomEvent('upload-updated', {
+      detail: { sid: sid, recognized: recognized, items: items, prefix: prefix }
+    }));
+  }
+
+  async function upload(){
+    const sid = getSid();
+    const f = elFile.files && elFile.files[0];
+    if(!f){ alert('Choose a file first.'); return; }
+
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('kind_hint', elHint.value || 'auto');
+    fd.append('sid', sid);
+
+    elBtn.disabled = true;
+    try{
+      const r = await fetch('/upload', { method:'POST', body: fd });
+      if(!r.ok){
+        alert('Upload failed: ' + (await r.text()));
+        return;
+      }
+      elFile.value = '';
+      await refresh();
+    }finally{
+      elBtn.disabled = false;
+    }
+  }
+
+  if(!HAS_KINDS){ elBtn.disabled = true; }
+  elBtn.addEventListener('click', upload);
+
+  // Expose minimal API for pages (enable/disable, manual refresh)
+  window.UploadWidget = window.UploadWidget || {};
+  window.UploadWidget[prefix] = {
+    refresh: refresh,
+    setEnabled: function(enabled){ elBtn.disabled = !enabled; },
+    getSid: getSid
+  };
+
+  // Initial refresh
+  document.addEventListener('DOMContentLoaded', function(){
+    refresh();
+  });
+})();
+</script>

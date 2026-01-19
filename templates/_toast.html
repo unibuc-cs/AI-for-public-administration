@@ -20,7 +20,7 @@
   function makeToast({title,msg,type='info',ttl=4000}){
     const el = document.createElement('div');
     el.className = `toast ${type}`;
-    el.innerHTML = `<span class="t-close" aria-label="close">✕</span>
+    el.innerHTML = `<span class="t-close" aria-label="close">x</span>
                     ${title ? `<div class="t-title">${title}</div>`:''}
                     <div class="t-msg">${msg||''}</div>`;
     wrap.appendChild(el);

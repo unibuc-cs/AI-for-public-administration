@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Operator – CEI/CIS/CIP/AS</title>
+  <title>Operator - CEI/CIS/CIP/AS</title>
   <style>
     :root { --main: 1fr; --rail: minmax(280px, 30%); }
     .two-col { display:grid; grid-template-columns: var(--main) var(--rail); gap:16px; align-items:start; }
@@ -37,12 +37,12 @@
       <p><a href="/">← Chat public</a></p>
 
       <h3>Sloturi disponibile (Bucuresti-S1)</h3>
-      <div id="slots" class="muted">Se încarcă…</div>
+      <div id="slots" class="muted">Se incarca...</div>
       <h3>Dosare</h3>
       <table>
         <thead>
           <tr>
-            <th>Case ID</th><th>Tip</th><th>Status</th><th>Persoană</th><th>Acțiuni</th>
+            <th>Case ID</th><th>Tip</th><th>Status</th><th>Persoana</th><th>Actiuni</th>
           </tr>
         </thead>
         <tbody id="casesBody">
@@ -65,7 +65,7 @@
                       <option>READY_FOR_PICKUP</option>
                       <option>CLOSED</option>
                     </select>
-                    <button type="submit">Schimbă status</button>
+                    <button type="submit">Schimba status</button>
                   </form>
                   <form method="post" action="/operator/reschedule">
                     <input type="hidden" name="case_id" value="{{ c.case_id }}"/>
@@ -180,7 +180,7 @@ function renderCases(cases){
             <option>READY_FOR_PICKUP</option>
             <option>CLOSED</option>
           </select>
-          <button type="submit">Schimbă status</button>
+          <button type="submit">Schimba status</button>
         </form>
         <form method="post" action="/operator/reschedule">
           <input type="hidden" name="case_id" value="${c.case_id}"/>
@@ -253,7 +253,7 @@ window.addEventListener('chat-steps', (ev) => {
       const a = step.reschedule.appointment || {};
       toast(`${a.when || ''} @ ${a.location_id || ''}`, 'ok', 'Reprogramat');
     }
-    if (step.cancel)  { toast('Programare anulată', 'warn', 'Anulare'); }
+    if (step.cancel)  { toast('Programare anulata', 'warn', 'Anulare'); }
     if (step.slots)   { window.__lastSlots = step.slots; toast(`Sloturi primite: ${step.slots.length}`, 'info', 'Sloturi'); }
     if (step.toast)   { const t = step.toast; toast(t.msg || '', t.type || 'info', t.title || ''); }
   }

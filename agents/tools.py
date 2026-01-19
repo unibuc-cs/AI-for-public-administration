@@ -3,7 +3,7 @@
 # Each tool encapsulates a clear external side-effect or query:
 #   - Eligibility mapping (auto decide CEI/CIS/CIP)
 #   - Document requirement / missing detection
-#   - Case submission to Primărie Locală
+#   - Case submission to Primarie Locala
 #   - Payment & Signature
 #   - Scheduling via CEI-HUB (and local fallback)
 #   - Reschedule/Cancel appointments
@@ -61,7 +61,7 @@ def tool_docs_missing(app_type: str, docs: list[dict]) -> dict:
 
 async def tool_case_submit(person: dict, app: dict) -> dict:
     """
-    Create a new case via the Primărie Locală mock service.
+    Create a new case via the Primarie Locala mock service.
     Expects {"person": {...}, "application": {...}} so primarie_local_mock can infer program/type.
     For CI: app should contain "type": "CEI"/"CIS"/"CIP" and optionally "docs".
     For AS: app should contain "program": "AS" and "docs".
@@ -162,7 +162,7 @@ async def tool_cancel_appointment(appt_id: str) -> dict:
 
 async def tool_upload(file_bytes: bytes, filename: str, kind_hint: str = "auto", sid: str = "anon") -> dict:
     """
-    Forward a file to the Primărie Locală mock OCR endpoint.
+    Forward a file to the Primarie Locala mock OCR endpoint.
     IMPORTANT: include `sid` so uploads are tied to the chat/form session.
     """
     files = {"file": (filename, file_bytes, "application/octet-stream")}

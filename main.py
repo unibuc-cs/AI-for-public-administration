@@ -7,7 +7,7 @@
 #  - Thin "proxy" helpers for listing slots, rescheduling and canceling appointments
 #  - Mounts the orchestrator API under /api
 #
-# NOTE: This app expects the two mock services (CEI-HUB and Primarie Locală)
+# NOTE: This app expects the two mock services (CEI-HUB and Primarie Locala)
 # to be available at HUB_URL and LOCAL_URL. If you prefer to run everything
 # from a single uvicorn process, you can mount those FastAPI apps as sub-apps
 
@@ -35,7 +35,9 @@ from agents.orchestrator import router as orch_router
 from auth import authenticate, create_token, get_user_from_cookie
 
 # DB initialization (creates tables on startup)
-from db import init_db
+from db import init_db, engine, Upload
+
+from sqlmodel import Session, select
 
 APP_TITLE = "MCP CEI/CIS/CIP Demo"
 
@@ -178,7 +180,7 @@ async def operator_ui(request: Request):
     Render the operator dashboard.
     Requires a valid JWT in the 'access_token' cookie.
     Displays:
-      - Cases list from the Primărie Locală
+      - Cases list from the Primarie Locala
       - Available slots from the CEI-HUB (for rescheduling)
       - HITL task queue list
     """
@@ -206,7 +208,7 @@ async def operator_ui(request: Request):
 @app.post("/operator/advance")
 async def operator_advance(request: Request, case_id: str = Form(...), next_status: str = Form(...)):
     """
-    Update case status via Primărie Locală mock service.
+    Update case status via Primarie Locala mock service.
     """
     user = get_user_from_cookie(request)
     if not user:
@@ -340,22 +342,31 @@ async def upload_doc(
         except Exception:
             thumb_path = None
 
-    # Forward to Primărie Locală OCR mock
+    # Forward to Primarie Locala OCR mock
     files = {"file": (file.filename, content, mime)}
     data = {"kind_hint": kind_hint, "sid": sid}
     async with httpx.AsyncClient() as client:
         r = await client.post(f"{LOCAL_URL}/uploads", files=files, data=data)
-        ocr = r.json()
+        r.raise_for_status()
+        ocr = r.json() if r.content else {}
 
     # --- Persist metadata in DB ---
+    upload_kind = None
+    upload_text = None
+    if isinstance(ocr, dict):
+        up = ocr.get("upload") or {}
+        if isinstance(up, dict):
+            upload_kind = up.get("kind")
+            upload_text = up.get("ocr_text")
+
     with Session(engine) as s:
         rec = Upload(
             session_id=sid,
             filename=file.filename,
             path="/" + path,
             thumb=("/" + thumb_path) if thumb_path else None,
-            kind=ocr.get("kind") if isinstance(ocr, dict) else None,
-            ocr_text=ocr.get("text") if isinstance(ocr, dict) else None,
+            kind=upload_kind,
+            ocr_text=upload_text,
         )
         s.add(rec)
         s.commit()
@@ -367,20 +378,51 @@ async def upload_doc(
             "path": "/" + path,
             "thumb": ("/" + thumb_path) if thumb_path else None,
             "ocr": ocr,
+            "recognized": ocr.get("recognized") if isinstance(ocr, dict) else [],
         }
     )
 
-from sqlmodel import select, Session
-from db import Upload, engine
+
+@app.get("/uploads")
+def uploads_list(session_id: str):
+    """Public API: list uploads for a session."""
+    with Session(engine) as s:
+        rows = s.exec(select(Upload).where(Upload.session_id == session_id).order_by(Upload.id)).all()
+
+    items = [r.dict() for r in rows]
+    recognized = []
+    seen = set()
+    for it in items:
+        k = (it.get("kind") or "").strip().lower()
+        if k and k not in seen:
+            seen.add(k)
+            recognized.append(k)
+
+    return {"session_id": session_id, "recognized": recognized, "items": items}
+
+
+@app.delete("/uploads/purge")
+async def uploads_purge(session_id: str):
+    """Public API: purge uploads for a session (DB + local mock best-effort)."""
+    # Best-effort purge on the local mock
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.delete(f"{LOCAL_URL}/uploads/purge", params={"session_id": session_id})
+    except Exception:
+        pass
+
+    with Session(engine) as s:
+        rows = s.exec(select(Upload).where(Upload.session_id == session_id)).all()
+        for r in rows:
+            s.delete(r)
+        s.commit()
+    return {"ok": True, "session_id": session_id}
+
 
 @app.get("/api/uploads")
-def list_uploads(sid: str):
-    """
-    Return all uploads for a given session ID.
-    """
-    with Session(engine) as s:
-        rows = s.exec(select(Upload).where(Upload.session_id == sid)).all()
-        return [r.dict() for r in rows]
+def uploads_list_legacy(sid: str):
+    # Backwards compatible alias
+    return uploads_list(session_id=sid)
 
 @app.get("/confirm-ci", response_class=HTMLResponse)
 def confirm_ci(request: Request, sid: str, decided: str = "auto"):

@@ -8,6 +8,7 @@ from .entry_agent import EntryAgent
 from .ci_agent import CIAgent
 from .social_agent import SocialAgent
 from .doc_intake_agent import DocIntakeAgent
+from .doc_ocr_agent import DocOCRAgent
 from .scheduling_agent import SchedulingAgent
 from .case_agent import CaseAgent
 from .operator_agent import OperatorAgent
@@ -19,6 +20,7 @@ AGENTS = {
     "ci": CIAgent(),
     "social": SocialAgent(),
     "doc_intake": DocIntakeAgent(),
+    "doc_ocr": DocOCRAgent(),
     "scheduling": SchedulingAgent(),
     "case": CaseAgent(),
     "operator": OperatorAgent(),

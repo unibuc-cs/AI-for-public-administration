@@ -1,5 +1,5 @@
 # services/primarie_local_mock.py
-# Mock Primărie Locală API with persistence + state machine + OCR + webhooks + HITL tasks:
+# Mock Primarie Locala API with persistence + state machine + OCR + webhooks + HITL tasks:
 #  - /cases CRUD subset (create/list/get + status transitions with validation)
 #  - /payments (mock confirmation; auto-advance to SIGN_PENDING)
 #  - /sign (mock signature; auto-advance to SCHEDULED)
@@ -66,7 +66,7 @@ def _infer_program_from_application(app: Dict[str, Any]) -> str:
 # Very light OCR keyword map for both CI and AS
 DOC_KEYWORDS = {
     # CI
-    "cert_nastere": ["certificat de nastere", "certificat naștere", "birth certificate"],
+    "cert_nastere": ["certificat de nastere", "certificat nastere", "birth certificate"],
     "ci_veche": ["ci veche", "buletin vechi", "old id"],
     "dovada_adresa": ["dovada adresa", "extras cf", "contract inchiriere", "utility bill"],
     "politie": ["politie", "furt", "declaratie politie", "police"],

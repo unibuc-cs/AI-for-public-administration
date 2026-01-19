@@ -3,7 +3,7 @@
 <html lang="ro">
 <head>
   <meta charset="utf-8"/>
-  <title>Confirmare – Ajutor social</title>
+  <title>Confirmare - Ajutor social</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <style>
     :root { --main: 1fr; --rail: minmax(280px, 30%); }
@@ -23,14 +23,14 @@
   <div class="two-col">
     <main>
       <div class="card">
-        <h1>Confirmare cerere – Ajutor social</h1>
+        <h1>Confirmare cerere - Ajutor social</h1>
         <div class="grid">
           <div>Program</div><div><strong>AS</strong></div>
-          <div>Documente (OCR)</div><div id="docList"><em>Se încarcă…</em></div>
-          <div>Reamintire</div><div class="muted">La prezentare, adu documentele în original.</div>
-          <div>Programare</div><div id="appt"><em>Încă nu ai o programare. Folosește chatul (dreapta) pentru rezervare.</em></div>
+          <div>Documente (OCR)</div><div id="docList"><em>Se incarca...</em></div>
+          <div>Reamintire</div><div class="muted">La prezentare, adu documentele in original.</div>
+          <div>Programare</div><div id="appt"><em>Inca nu ai o programare. Foloseste chatul (dreapta) pentru rezervare.</em></div>
         </div>
-        <div class="row"><button id="btnConfirm">Confirmă și închide</button></div>
+        <div class="row"><button id="btnConfirm">Confirma si inchide</button></div>
       </div>
     </main>
     <aside class="chat-col">
@@ -57,8 +57,8 @@
     }
 
     async function loadOCR(){
-      const r = await fetch(`/local/uploads?session_id=${encodeURIComponent(sid)}`);
-      if(!r.ok){ el.docList.innerHTML = '<em>Eroare la încărcare</em>'; return; }
+      const r = await fetch(`/uploads?session_id=${encodeURIComponent(sid)}`);
+      if(!r.ok){ el.docList.innerHTML = '<em>Eroare la incarcare</em>'; return; }
       const j = await r.json();
       const kinds = j.recognized || [];
       el.docList.innerHTML = kinds.length ? '<ul class="list">' + kinds.map(k=>`<li>${k}</li>`).join('') + '</ul>'
@@ -75,7 +75,7 @@
         else {
           // 3) Preselected-only slot (not reserved yet)
           const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
-          if (ps && (ps.when || ps.location_id)) showAppt(ps, 'Slot ales (rezervare în curs)');
+          if (ps && (ps.when || ps.location_id)) showAppt(ps, 'Slot ales (rezervare in curs)');
         }
       } catch(_) {}
     }
@@ -94,7 +94,7 @@
 
     el.btnConfirm.onclick = async () => {
       try { await fetch('/api/session/reset', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sid }) }); } catch(_){}
-      try { await fetch(`/local/uploads/purge?session_id=${encodeURIComponent(sid)}`, { method:'DELETE' }); } catch(_){}
+      try { await fetch(`/uploads/purge?session_id=${encodeURIComponent(sid)}`, { method:'DELETE' }); } catch(_){}
       try {
         sessionStorage.removeItem('last_appt');
         sessionStorage.removeItem('preselected_slot');
