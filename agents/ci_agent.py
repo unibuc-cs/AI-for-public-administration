@@ -70,6 +70,25 @@ class CIAgent(Agent):
                 state["reply"] = "Am detectat documente incarcate. Verific si incerc sa completez automat."
                 return state
 
+
+        # Slot guidance (form-first UX):
+        # On the CI form, the user must pick a slot in the UI selector to unlock the form.
+        # We keep this simple: if no slot is selected yet, the assistant nudges the user to do so.
+        if isinstance(app, dict):
+            selected_slot_id = app.get("selected_slot_id")
+        else:
+            selected_slot_id = None
+
+        if not selected_slot_id:
+            # Only nudge when user is asking about scheduling or starting the flow.
+            if (not msg) or any(k in msg for k in ["program", "programare", "slot", "programeaza", "vreau", "ajuta"]):
+                state["reply"] = (
+                    "Pentru CI, te rog mai întâi să alegi un interval din lista **Slots** (sus), apoi apasă **Use this slot**. "
+                    "După aceea pot verifica actele și te ghidez mai departe."
+                )
+                state["next_agent"] = None
+                return state
+
         # 1) If user indicates they uploaded docs, run intake+OCR.
         if any(k in msg for k in ["am incarcat", "am upload", "incarcat", "upload"]):
             state["return_to"] = self.name

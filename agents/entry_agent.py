@@ -59,7 +59,7 @@ class EntryAgent(Agent):
 
         # 2) If we are on the PUBLIC chat, prefer navigation for CI / Social
         if ui_context == "public" and intent in {"ci", "social"}:
-            url = f"/user-ci?sid={sid}" if intent == "ci" else f"/user-social?sid={sid}"
+            url = f"/user-ci?sid=ci-{sid}" if intent == "ci" else f"/user-social?sid=social-{sid}"
             label = "Deschide formular CI" if intent == "ci" else "Deschide formular Ajutor Social"
             state.setdefault("steps", []).append({"navigate": {"url": url, "label": label}})
             # Keep reply simple; the widget will render as clickable link.

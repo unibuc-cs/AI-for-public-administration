@@ -108,7 +108,7 @@ async def user_ci_page(request: Request, sid: str = "form-1"):
     Render the guided CI form (Person + Application).
     The page uses /api/validate, /api/create_case, /api/slots, /api/schedule.
     """
-    return templates.TemplateResponse("user_ci.html", {"request": request, "app_title": APP_TITLE, "sid": sid})
+    return templates.TemplateResponse("user_ci.html", {"request": request, "app_title": APP_TITLE, "sid": sid, "ui_context": "ci"})
 
 # Social case
 @app.get("/user-social", response_class=HTMLResponse)
@@ -117,7 +117,7 @@ async def user_social_page(request: Request, sid: str = "form-1"):
     Render the guided AS - Asistenta Sociala  form (Person + Application).
     The page uses /api/validate, /api/create_case, /api/slots, /api/schedule.
     """
-    return templates.TemplateResponse("user_social.html", {"request": request, "app_title": APP_TITLE, "sid": sid})
+    return templates.TemplateResponse("user_social.html", {"request": request, "app_title": APP_TITLE, "sid": sid, "ui_context": "social"})
 
 # --------------------------- AUTH PAGES ---------------------------
 
@@ -246,7 +246,9 @@ async def op_reschedule(request: Request, case_id: str = Form(...), appt_id: str
         return RedirectResponse("/login", status_code=303)
 
     async with httpx.AsyncClient() as client:
-        await client.post("/api/reschedule", json={"appt_id": appt_id, "new_slot_id": slot_id})
+        base = str(request.base_url).rstrip("/")
+        r = await client.post(f"{base}/api/reschedule", json={"appt_id": appt_id, "new_slot_id": slot_id})
+        r.raise_for_status()
         await client.patch(f"{LOCAL_URL}/cases/{case_id}", params={"status":"SCHEDULED"})
 
     return RedirectResponse(url="/operator", status_code=303)
@@ -262,7 +264,9 @@ async def op_cancel(request: Request, case_id: str = Form(...), appt_id: str = F
         return RedirectResponse("/login", status_code=303)
 
     async with httpx.AsyncClient() as client:
-        await client.post("/api/cancel", json={"appt_id": appt_id})
+        base = str(request.base_url).rstrip("/")
+        r = await client.post(f"{base}/api/cancel", json={"appt_id": appt_id})
+        r.raise_for_status()
 
     return RedirectResponse(url="/operator", status_code=303)
 

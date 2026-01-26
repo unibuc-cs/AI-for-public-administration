@@ -12,6 +12,7 @@ from __future__ import annotations
 from fastapi import Request, Response
 import json
 import os
+import io
 import traceback
 import uuid
 from datetime import datetime, timedelta
@@ -31,6 +32,52 @@ from db import (
 
 # Ensure tables exist
 init_db()
+
+
+# --- OCR helpers (prototype-friendly, local-first) ---
+# We keep OCR optional: if the OCR library is not installed, we fall back to filename-based detection.
+# Recommended for local runs:
+#   pip install easyocr opencv-python-headless pillow
+# (easyocr pulls torch; on CPU this is still OK for a prototype.)
+_OCR_READER = None
+
+def _get_easyocr_reader():
+    global _OCR_READER
+    if _OCR_READER is not None:
+        return _OCR_READER
+    try:
+        import easyocr  # type: ignore
+        # Romanian isn't always a separate model in easyocr; 'en' covers Latin well, 'ro' may be supported depending on version.
+        # We include both, and easyocr will ignore unsupported ones.
+        _OCR_READER = easyocr.Reader(['ro', 'en'], gpu=False)
+        return _OCR_READER
+    except Exception:
+        return None
+
+def _ocr_text_from_bytes(content: bytes) -> str:
+    """Return raw OCR text from image bytes, best-effort."""
+    reader = _get_easyocr_reader()
+    if reader is None:
+        return ""
+
+    try:
+        from PIL import Image
+        import numpy as np  # type: ignore
+
+        im = Image.open(io.BytesIO(content)).convert("RGB")
+        # Mild resize to help OCR on small photos; keep it simple.
+        w, h = im.size
+        if max(w, h) < 1200:
+            scale = 1200 / max(w, h)
+            im = im.resize((int(w*scale), int(h*scale)))
+
+        arr = np.array(im)
+        out = reader.readtext(arr, detail=0, paragraph=True)
+        if isinstance(out, list):
+            return "\n".join([str(x) for x in out if x])
+        return str(out)
+    except Exception:
+        return ""
 
 local = APIRouter(tags=["local"])
 
@@ -106,7 +153,7 @@ async def upload_file(
     NOTE: The main app is responsible for saving the actual file content; here we store metadata only.
     """
     content = await file.read()
-    ocr_text = file.filename.lower()
+    ocr_text = _ocr_text_from_bytes(content) or file.filename.lower()
 
     # Prefer hint when not 'auto'
     kind = None if kind_hint == "auto" else kind_hint

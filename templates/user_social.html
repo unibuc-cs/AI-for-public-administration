@@ -130,6 +130,8 @@
 (function(){
   const params = new URLSearchParams(location.search);
   const sid = params.get('sid') || "{{ sid }}";
+let selectedSlotId = null;
+
   console.log("sid =", sid);
 
 
@@ -264,6 +266,7 @@
   el.locSelect.onchange = async () => { await fetchAndRenderSlots(el.locSelect.value); };
   el.btnUseSlot.onclick = () => {
     const id = el.slotSelect.value;
+  selectedSlotId = id;
     if (!id) { alert('Alege mai întâi un slot'); return; }
     const opt = el.slotSelect.selectedOptions[0];
     const chosen = { id, when: opt ? opt.textContent : '', location_id: el.locSelect.value, sid };
@@ -363,6 +366,26 @@
       }
     }
   });
+
+
+// Expose form state to the shared chat widget.
+window.getFormPayload = function () {
+  if (!selectedSlotId) {
+    try {
+      const pre = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
+      if (pre && pre.id) selectedSlotId = pre.id;
+    } catch(_) {}
+  }
+
+  const payload = makePayload();
+  payload.application = payload.application || {};
+  payload.application.ui_context = "social";
+  payload.application.selected_slot_id = selectedSlotId;
+  payload.application.location_id = el.locSelect.value;
+  // 'program' is used by SchedulingAgent to show local slots in chat when needed
+  payload.application.program = "AS";
+  return payload;
+};
 
 </script>
 </body>

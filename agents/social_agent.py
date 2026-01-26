@@ -70,6 +70,22 @@ class SocialAgent(Agent):
                 state["reply"] = "Am detectat documente incarcate. Verific si incerc sa completez automat."
                 return state
 
+
+        # Slot guidance (form-first UX):
+        if isinstance(app, dict):
+            selected_slot_id = app.get("selected_slot_id")
+        else:
+            selected_slot_id = None
+
+        if not selected_slot_id:
+            if (not msg) or any(k in msg for k in ["program", "programare", "slot", "programeaza", "ajutor", "social", "vreau"]):
+                state["reply"] = (
+                    "Pentru ajutor social, te rog să alegi un interval din lista **Slots** și să apeși **Use this slot**. "
+                    "După aceea pot verifica documentele și pot continua cu cererea."
+                )
+                state["next_agent"] = None
+                return state
+
         # 1) If user indicates they uploaded docs, run intake+OCR.
         if any(k in msg for k in ["am incarcat", "am upload", "incarcat", "upload"]):
             state["return_to"] = self.name

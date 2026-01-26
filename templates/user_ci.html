@@ -155,8 +155,10 @@
 
 <script>
 const qs = new URLSearchParams(location.search);
-const sid = qs.get('sid') || 'form-' + Math.random().toString(36).slice(2,8);
+const sid = qs.get('sid') || "{{ sid }}";
 document.getElementById('sidSpan').textContent = sid;
+let selectedSlotId = null;
+
 
 // Fix microseconds like 2025-10-19T04:29:49.510815Z (JS Date only supports ms)
 function isoToDate(iso) {
@@ -541,6 +543,7 @@ btnUseSlot.onclick = () => {
   if (!id) { alert('Choose a slot first'); return; }
   const opt = el.slotSelect.selectedOptions[0];
   // Build a lightweight object for display + later use
+  selectedSlotId = id;
   const chosen = {
     id,
     when: opt ? opt.textContent : '',
@@ -573,6 +576,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     } catch(_) {}
 });
+
+
+// Expose form state to the shared chat widget.
+// The widget will attach this object as { person, application } in /api/chat.
+window.getFormPayload = function () {
+  // Keep the latest selected slot (also stored in sessionStorage)
+  if (!selectedSlotId) {
+    try {
+      const pre = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
+      if (pre && pre.id) selectedSlotId = pre.id;
+    } catch(_) {}
+  }
+
+  // Mirror the same payload shape used by the Validate/Create Case buttons.
+  const payload = makePayload();
+
+  // Add UI hints the chatbot can use.
+  payload.application = payload.application || {};
+  payload.application.ui_context = "ci";
+  payload.application.selected_slot_id = selectedSlotId;
+  payload.application.location_id = el.locSelect.value;
+
+  return payload;
+};
 
 </script>
 
