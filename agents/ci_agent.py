@@ -181,8 +181,9 @@ class CIAgent(Agent):
             app.setdefault("ui_context", "ci")
 
         # Auto-run intake+OCR when uploads changed (no need for user to type anything).
+        selected_slot_id = app.get("selected_slot_id") if isinstance(app, dict) else None
         last_id = _get_last_upload_id(sid)
-        if last_id is not None:
+        if selected_slot_id and last_id is not None:
             seen = app.get("uploads_seen_last_id")
             if seen != last_id:
                 app["uploads_seen_last_id"] = last_id
@@ -192,7 +193,7 @@ class CIAgent(Agent):
                 state["reply"] = "Am detectat documente incarcate. Le analizez (OCR) si revin cu o propunere de completare automata."
                 return state
 
-        if last_id is not None and isinstance(app, dict):
+        if selected_slot_id and last_id is not None and isinstance(app, dict):
             offered_for = app.get("autofill_offered_for_upload_id")
             if offered_for != last_id:
                 fields, sources = _best_fields_from_uploads(sid)
@@ -261,7 +262,7 @@ class CIAgent(Agent):
             return state
 
         # 1) If user indicates they uploaded docs, run intake+OCR.
-        if any(k in msg for k in ["am incarcat", "am upload", "incarcat", "upload"]):
+        if selected_slot_id and any(k in msg for k in ["am incarcat", "am upload", "incarcat", "upload"]):
             state["return_to"] = self.name
             # Prevent re-triggering the auto-intake loop within the same request.
             last_id = _get_last_upload_id(sid)
@@ -288,7 +289,8 @@ class CIAgent(Agent):
         # elig = tool_eligibility(elig_reason)
         # if (app.get("type") or "auto") == "auto":
         #     app["type"] = elig["decided_type"]
-        state.setdefault("steps", []).append({"eligibility": elig_reason, "type": app.get("type")})
+        if type_elig_confirmed:
+            state.setdefault("steps", []).append({"eligibility": elig_reason, "type": app.get("type")})
 
         # 4) If no docs yet, ask user to upload (or say "am incarcat").
         docs = app.get("docs") or []

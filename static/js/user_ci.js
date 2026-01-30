@@ -84,6 +84,12 @@ setVal(el.docTip, prefill.docTip);
 const uploadedKinds = new Set();
 const uploadItems = [];
 
+
+function hasSlotSelected() {
+  return !!selectedSlotId;
+}
+
+
 /* Helper for eligibility and reason */
 function applyEligibilityDocRules() {
   const elig = el.elig.value;
@@ -106,7 +112,7 @@ function applyEligibilityDocRules() {
 
   // If user selected something and the rules were applied, enable the gate
     const eligGateOk = (el.type.value !== "None") &&   (el.elig.value !== 'None');
-  if (eligGateOk) {
+  if (eligGateOk && hasSlotSelected()) {
     setGate(true, gateApp);
   } else {
     setGate(false, gateApp);
@@ -128,22 +134,6 @@ function requiredDocKinds() {
   if (type === 'VR') req.push('ci_veche'); // footprint needed
 
   return req;
-}
-
-
-/* Render uploaded list */
-function renderUploads(items){
-  const box = el.uploads_list;
-  if(!items || !items.length){
-    box.innerHTML = '<em>No files uploaded yet.</em>';
-    return;
-  }
-  box.innerHTML = items.map(it=>{
-    const img = it.thumb ? `<img src="${it.thumb}" class="thumb">` : '';
-    const ocr = it.kind ? `[${it.kind}]` : '';
-    const open = it.path ? `<a href="${it.path}" target="_blank">open</a>` : '';
-    return `<div style="display:flex;align-items:center;margin:4px 0">${img}<span>${it.name} ${ocr} ${open}</span></div>`;
-  }).join('');
 }
 
 /* Upload document with session awareness */
@@ -194,7 +184,7 @@ function makePayload(){
     },
     application:
         {
-            type_elig_confirmed: !gateApp.classList.contains('dim'),
+            type_elig_confirmed: (el.type.value !== "None" && el.elig.value !== "None" && selectedSlotId),
             type: el.type.value, // CEI / CIS / CIP / VR
             program: 'CI',
             eligibility_reason: el.elig.value,
@@ -250,75 +240,94 @@ async function fetchAndRenderSlots(locationId) {
   const slots = await r.json();
   renderSlotOptions(el.slotSelect, slots, { withLocation: false });
   // preselect the first slot for convenience
-  if (el.slotSelect.options.length > 0 && !el.slotSelect.value) {
-    el.slotSelect.value = el.slotSelect.options[0].value;
-  }
+    if (!selectedSlotId && el.slotSelect.options.length > 0) {
+      el.slotSelect.value = el.slotSelect.options[0].value;
+    }
 }
 
 /* Validate form */
 el.btnValidate.onclick = async () => {
-
-    if (gateApp.classList.contains('dim')) {
-      toast?.('Alege Motiv si Tip cerere mai prima oara.', 'warn', 'Pasul 2 necesar');
+    // ignore double clicks
+    if (el.btnValidate.disabled) return;
+    el.btnValidate.disabled = true;
+    if (!selectedSlotId || el.type.value === "None" || el.elig.value === "None") {
+      toast?.('Alege mai intai slot, apoi Motiv si Tip cerere.', 'warn', 'Pas necesar');
+      el.btnValidate.disabled = false;
       return;
         }
 
-    // Check required docs based on eligibility and type
-    const req = requiredDocKinds();
-    const missingReq = req.filter(k => !recognizedKinds.has(k));
-    if (missingReq.length) {
+    const oldText = el.btnValidate.textContent;
+    el.btnValidate.textContent = 'Validating...';
+
+    try{
+        // Check required docs based on eligibility and type
+        await refreshDocsFromOCR();
+        const req = requiredDocKinds();
+        const missingReq = req.filter(k => !recognizedKinds.has(k));
+        if (missingReq.length) {
+          el.valMsg.classList.remove('hidden');
+          el.valMsg.className = 'err';
+          el.valMsg.textContent = 'Lipsesc documente obligatorii: ' + missingReq.join(', ');
+          el.btnValidate.disabled = false;
+          return;
+        }
+
+      const payload = makePayload();
+      const r = await fetch('/api/validate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json();
+
       el.valMsg.classList.remove('hidden');
-      el.valMsg.className = 'err';
-      el.valMsg.textContent = 'Lipsesc documente obligatorii: ' + missingReq.join(', ');
-      return;
-    }
 
-  const payload = makePayload();
-  const r = await fetch('/api/validate', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload)
-  });
-  const j = await r.json();
-
-  el.valMsg.classList.remove('hidden');
-
-  if (!j.valid) {
-    el.valMsg.className = 'err';
-    el.valMsg.textContent = (j.errors || []).join(' • ');
-    el.slotsBox.classList.add('hidden');
-    return;
-  }
-
-  const missing = Array.isArray(j.missing) ? j.missing : [];
-  if (missing.length) {
-    el.valMsg.className = 'err';
-    el.valMsg.innerHTML = `<div class="err" style="margin-top:6px">Missing: ${missing.join(', ')}</div>`;
-    el.slotsBox.classList.add('hidden');
-    return;
-  }
-
-  // No missing docs -> we’re done with this form, go to confirmation.
-  el.valMsg.className = 'ok';
-  el.valMsg.textContent = ' Mergem la confirmare…';
-
-  // Redirect to confirmation (do NOT reset here; reset happens on Confirm)
-  const target = `/confirm-ci?sid=${encodeURIComponent(sid)}`
-    + (() => {
-      try {
-        const a = JSON.parse(sessionStorage.getItem('last_appt') || 'null');
-        if (a && (a.when || a.location_id)) {
-          const qp = `&appt_when=${encodeURIComponent(a.when||'')}&appt_loc=${encodeURIComponent(a.location_id||'')}`;
-          return qp;
-        }
-      } catch(_) {}
-      const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
-      if (ps && (ps.when || ps.location_id)) {
-        return `&appt_when=${encodeURIComponent(ps.when||'')}&appt_loc=${encodeURIComponent(ps.location_id||'')}`;
+      if (!j.valid) {
+        el.valMsg.className = 'err';
+        el.valMsg.textContent = (j.errors || []).join(' • ');
+        el.slotsBox.classList.add('hidden');
+        el.btnValidate.disabled = false;
+        return;
       }
-      return '';
-    })();
-    setTimeout(() => { window.location.href = target; }, 400);
+
+      const missing = Array.isArray(j.missing) ? j.missing : [];
+      if (missing.length) {
+        el.valMsg.className = 'err';
+        el.valMsg.innerHTML = `<div class="err" style="margin-top:6px">Missing: ${missing.join(', ')}</div>`;
+        el.slotsBox.classList.add('hidden');
+        el.btnValidate.disabled = false;
+        return;
+      }
+
+      // No missing docs -> we’re done with this form, go to confirmation.
+      el.valMsg.className = 'ok';
+      el.valMsg.textContent = ' Mergem la confirmare...';
+
+      // Redirect to confirmation (do NOT reset here; reset happens on Confirm)
+      const target = `/confirm-ci?sid=${encodeURIComponent(sid)}`
+        + (() => {
+          try {
+            const a = JSON.parse(sessionStorage.getItem('last_appt') || 'null');
+            if (a && (a.when || a.location_id)) {
+              const qp = `&appt_when=${encodeURIComponent(a.when||'')}&appt_loc=${encodeURIComponent(a.location_id||'')}`;
+              return qp;
+            }
+          } catch(_) {}
+          const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
+          if (ps && (ps.when || ps.location_id)) {
+            return `&appt_when=${encodeURIComponent(ps.when||'')}&appt_loc=${encodeURIComponent(ps.location_id||'')}`;
+          }
+          el.btnValidate.disabled = false;
+          return '';
+        })();
+        setTimeout(() => { window.location.href = target; }, 400);
+    }
+    finally {
+        // If we are navigating away, no need to re-enable
+        // but re-enabling is harmless if navigation is blocked.
+        el.btnValidate.textContent = oldText;
+        el.btnValidate.disabled = false;
+    }
 };
 
 
@@ -385,8 +394,8 @@ window.addEventListener('chat-steps', (ev) => {
   if (!Array.isArray(steps)) return;
 
   for (const step of steps) {
-    if (step.missing) {
-      const list = step.missing;
+    if (step.missing_docs) {
+      const list = step.missing_docs;
       if (list.length) {
         toast(`Mai lipsesc: ${list.join(', ')}`, 'warn', 'Documente lipsa');
       } else {
@@ -395,6 +404,11 @@ window.addEventListener('chat-steps', (ev) => {
       // keep your existing UI highlights if you already do them:
       if (typeof highlightMissing === 'function') highlightMissing(list);
     }
+
+    if (step.missing_fields) {
+    toast(`Lipsesc campuri: ${step.missing_fields.join(', ')}`, 'warn', 'Date lipsa');
+    }
+
     if (step.autofill && step.autofill.fields) {
       const f = step.autofill.fields || {};
       // Fill only what we have; keep user's manual edits otherwise.
@@ -402,7 +416,7 @@ window.addEventListener('chat-steps', (ev) => {
       if (f.nume && el.nume) el.nume.value = f.nume;
       if (f.prenume && el.prenume) el.prenume.value = f.prenume;
       if (f.adresa && el.adresa) el.adresa.value = f.adresa;
-      toast('Am completat automat câmpurile din OCR. Verifica si corecteaza daca e nevoie.', 'ok', 'Autofill');
+      toast('Am completat automat campurile din OCR. Verifica si corecteaza daca e nevoie.', 'ok', 'Autofill');
     }
     if (step.slots) {
       toast(`Am gasit ${step.slots.length} sloturi`, 'info', 'Programari');
@@ -435,7 +449,9 @@ async function refreshDocsFromOCR(){
   recognizedKinds.clear();
   (j.recognized || []).forEach(k => recognizedKinds.add(k));
 
-  toast(`OCR found ${recognizedKinds.size} document(s)`, 'info', 'OCR Update');
+  if (recognizedKinds.size) {
+      toast(`OCR found ${recognizedKinds.size} document(s)`, 'info', 'OCR Update');
+  }
 
   // 2) Check the disabled checkboxes based ONLY on OCR
   el.doc_cert.checked = recognizedKinds.has('cert_nastere');
@@ -454,6 +470,10 @@ async function refreshDocsFromOCR(){
 
 /* Change location -> reload slots */
 el.locSelect.onchange = async () => {
+  selectedSlotId = null;
+  setGate(false, gateEligType);
+  setGate(false, gateApp);
+  slotPicked.textContent = '';
   await fetchAndRenderSlots(el.locSelect.value);
 };
 
@@ -486,14 +506,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
     await fetchAndRenderSlots(el.locSelect.value);
+
     setGate(false, gateEligType); // locked at start
     // If user had a preselected slot (coming back), reflect it
     try {
     const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
     if (ps && ps.sid === sid) {
+      const prevLoc = el.locSelect.value;
       el.locSelect.value = ps.location_id || el.locSelect.value;
+
+      if (el.locSelect.value !== prevLoc) {
+        await fetchAndRenderSlots(el.locSelect.value);
+      }
+
       el.slotSelect.value = ps.id || el.slotSelect.value;
       slotPicked.textContent = `Selected: ${ps.when || ''} @ ${ps.location_id || ''}`;
+
+      selectedSlotId = ps.id;
       setGate(true, gateEligType);
       setGate(false, gateApp); // still locked until user selects app type and eligibility
     }
