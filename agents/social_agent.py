@@ -80,8 +80,8 @@ class SocialAgent(Agent):
         if not selected_slot_id:
             if (not msg) or any(k in msg for k in ["program", "programare", "slot", "programeaza", "ajutor", "social", "vreau"]):
                 state["reply"] = (
-                    "Pentru ajutor social, te rog să alegi un interval din lista **Slots** și să apeși **Use this slot**. "
-                    "După aceea pot verifica documentele și pot continua cu cererea."
+                    "Pentru ajutor social, te rog sa alegi un interval din lista Slots  si sa apesi Use this slot. "
+                    "Dupa aceea pot verifica documentele si pot continua cu cererea."
                 )
                 state["next_agent"] = None
                 return state

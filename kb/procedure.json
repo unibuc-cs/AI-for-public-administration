@@ -1,7 +1,7 @@
 {
   "eligibility_rules": {
-    "EXP_60": "CI expiră în ≤60 zile sau a expirat recent",
-    "AGE_14": "Persoana a împlinit 14 ani (prima CI)",
+    "EXP_60": "CI expira in ≤60 zile sau a expirat recent",
+    "AGE_14": "Persoana a implinit 14 ani (prima CI)",
     "CHANGE_NAME": "Schimbare nume",
     "CHANGE_ADDR": "Schimbare adresa/Stabilire resedinta sau viza flotant",
     "LOSS": "Pierderea, furtul sau deteriorarea CI"
@@ -19,9 +19,9 @@
     "VR": {"default" :  1}
   },
   "notes": [
-    "Pentru CEI, programările se fac pe HUB MAI (serverul mock 8001).",
-    "Pentru CIS/CIP, programările/fluxul se fac local (serverul mock 8002).",
-    "Pentru furt se atașează dovada de la poliție.",
-    "Dovada adresei: extras CF / contract închiriere / declarație primire în spațiu."
+    "Pentru CEI, programarile se fac pe HUB MAI (serverul mock 8001).",
+    "Pentru CIS/CIP, programarile/fluxul se fac local (serverul mock 8002).",
+    "Pentru furt se ataseaza dovada de la poliție.",
+    "Dovada adresei: extras CF / contract inchiriere / declarație primire in spațiu."
   ]
 }

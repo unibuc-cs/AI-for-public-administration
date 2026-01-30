@@ -84,12 +84,12 @@ let selectedSlotId = null;
     const items = j.items || [];
     el.uploads_list.innerHTML = items.length
       ? items.map(it => `<div style="margin:4px 0">${it.filename} ${it.kind?`[${it.kind}]`:''}</div>`).join('')
-      : '<em>Niciun fișier încărcat.</em>';
+      : '<em>Niciun fisier incarcat.</em>';
   }
 
   async function uploadDoc(){
     const f = el.file.files[0];
-    if(!f){ alert('Alege un fișier'); return; }
+    if(!f){ alert('Alege un fisier'); return; }
     const fd = new FormData();
     fd.append('file', f);
     const kind = (el.hint && el.hint.value) ? String(el.hint.value) : '';
@@ -138,7 +138,7 @@ let selectedSlotId = null;
   el.btnUseSlot.onclick = () => {
     const id = el.slotSelect.value;
   selectedSlotId = id;
-    if (!id) { alert('Alege mai întâi un slot'); return; }
+    if (!id) { alert('Alege mai intâi un slot'); return; }
     const opt = el.slotSelect.selectedOptions[0];
     const chosen = { id, when: opt ? opt.textContent : '', location_id: el.locSelect.value, sid };
     setGate(true);
@@ -148,7 +148,7 @@ let selectedSlotId = null;
   el.btnUpload.onclick = uploadDoc;
 
   el.btnValidate.onclick = async () => {
-    if (el.gate.classList.contains('dim')) { alert('Alege un slot mai întâi'); return; }
+    if (el.gate.classList.contains('dim')) { alert('Alege un slot mai intâi'); return; }
     const payload = makePayload();
     const r = await fetch('/api/validate-social', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     const j = await r.json();
@@ -161,12 +161,12 @@ let selectedSlotId = null;
     }
     if (j.missing && j.missing.length) {
       el.valMsg.className = 'err';
-      el.valMsg.innerHTML = `Lipsește: ${j.missing.join(', ')}`;
+      el.valMsg.innerHTML = `Lipseste: ${j.missing.join(', ')}`;
       return;
     }
     // success -> go to confirmation
     el.valMsg.className = 'ok';
-    el.valMsg.textContent = 'Validare reușită. Mergem la confirmare…';
+    el.valMsg.textContent = 'Validare reusita. Mergem la confirmare…';
 
     sessionStorage.setItem('last_decided_type', 'AS');
     const ps = JSON.parse(sessionStorage.getItem('preselected_slot') || 'null');
@@ -175,7 +175,7 @@ let selectedSlotId = null;
   };
 
   el.btnCreate.onclick = async () => {
-    if (el.gate.classList.contains('dim')) { alert('Alege un slot mai întâi'); return; }
+    if (el.gate.classList.contains('dim')) { alert('Alege un slot mai intâi'); return; }
     // Create case (program=AS)
     const payload = makePayload();
     const r1 = await fetch('/api/create_case_social', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
@@ -224,16 +224,16 @@ let selectedSlotId = null;
       }
       if (step.missing) {
         const list = step.missing || [];
-        if (list.length) toast(`Mai lipsesc: ${list.join(', ')}`, 'warn', 'Documente lipsă');
-        else toast('Toate documentele sunt în regulă.', 'ok', 'Validare');
+        if (list.length) toast(`Mai lipsesc: ${list.join(', ')}`, 'warn', 'Documente lipsa');
+        else toast('Toate documentele sunt in regula.', 'ok', 'Validare');
       }
       if (step.slots) {
-        toast(`Am găsit ${step.slots.length} sloturi`, 'info', 'Programări');
+        toast(`Am gasit ${step.slots.length} sloturi`, 'info', 'Programari');
         try { renderSlotOptions(el.slotSelect, step.slots); } catch(_) {}
       }
       if (step.scheduling) {
         const a = step.scheduling.appointment || {};
-        toast(`Programare creată: ${a.when || ''}`, 'ok', 'Confirmare');
+        toast(`Programare creata: ${a.when || ''}`, 'ok', 'Confirmare');
       }
     }
   });

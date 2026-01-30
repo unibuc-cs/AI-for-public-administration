@@ -29,9 +29,9 @@
     <div class="card">
       <h1>Ajutor social (Venit de incluziune) – Cerere</h1>
 
-      <!-- Slots first (AS slots from Primărie) -->
+      <!-- Slots first (AS slots from Primarie) -->
       <fieldset id="slotsBox">
-        <legend>Alege programarea (obligatoriu înainte de completare)</legend>
+        <legend>Alege programarea (obligatoriu inainte de completare)</legend>
         <div class="row">
           <div>
             <label>Locație
@@ -48,8 +48,8 @@
           </div>
         </div>
         <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
-          <button id="btnUseSlot" type="button">Folosește acest slot</button>
-          <span class="muted">Nu rezervă încă. Doar deblochează formularul.</span>
+          <button id="btnUseSlot" type="button">Foloseste acest slot</button>
+          <span class="muted">Nu rezerva inca. Doar deblocheaza formularul.</span>
         </div>
         <div id="slotPicked" class="muted" style="margin-top:8px"></div>
       </fieldset>
@@ -65,7 +65,7 @@
             <label>Nume <input id="nume"></label>
             <label>Prenume <input id="prenume"></label>
             <label>Email <input id="email"></label>
-            <label>Adresă <input id="adresa"></label>
+            <label>Adresa <input id="adresa"></label>
           </div>
         </fieldset>
 
@@ -87,13 +87,13 @@
 
         <!-- Upload documents (OCR-only; disabled checkboxes) -->
         <fieldset>
-          <legend>Documente (se bifează automat după OCR)</legend>
+          <legend>Documente (se bifeaza automat dupa OCR)</legend>
           <div class="row">
             <div>
               <label><input id="doc_cerere" type="checkbox" disabled> Cerere tip ajutor social</label>
               <label><input id="doc_ci" type="checkbox" disabled> CI solicitant</label>
               <label><input id="doc_venit" type="checkbox" disabled> Dovezi venit (adeverințe/cupoane)</label>
-              <label><input id="doc_locuire" type="checkbox" disabled> Dovadă locuire (contract, adeverință)</label></div>
+              <label><input id="doc_locuire" type="checkbox" disabled> Dovada locuire (contract, adeverința)</label></div>
             <div>
               <input id="file" type="file" />
               <div style="display:flex; gap:8px; margin-top:8px;">
@@ -104,7 +104,7 @@
                   <option value="acte_venit">acte_venit</option>
                   <option value="acte_locuire">acte_locuire</option>
                 </select>
-                <button id="btnUpload" type="button" disabled>Încarcă</button>
+                <button id="btnUpload" type="button" disabled>incarca</button>
               </div>
               <div id="uploads_list" class="muted" style="margin-top:8px"></div>
             </div>
@@ -112,8 +112,8 @@
         </fieldset>
 
         <div class="row">
-          <button id="btnValidate" type="button">Validează</button>
-          <button id="btnCreateCase" type="button">Creează dosarul & rezervă</button>
+          <button id="btnValidate" type="button">Valideaza</button>
+          <button id="btnCreateCase" type="button">Creeaza dosarul & rezerva</button>
         </div>
       </div>
     </div>

@@ -140,7 +140,7 @@ function renderUploads(items){
   }
   box.innerHTML = items.map(it=>{
     const img = it.thumb ? `<img src="${it.thumb}" class="thumb">` : '';
-    const ocr = it.ocr?.kind ? `[${it.ocr.kind}]` : '';
+    const ocr = it.kind ? `[${it.kind}]` : '';
     const open = it.path ? `<a href="${it.path}" target="_blank">open</a>` : '';
     return `<div style="display:flex;align-items:center;margin:4px 0">${img}<span>${it.name} ${ocr} ${open}</span></div>`;
   }).join('');
@@ -169,6 +169,8 @@ async function uploadDoc(){
 
   if(window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
     window.ChatWidget.sendSystem('__upload__');
+    // Set a slight delay to allow chat to process upload event and force a re-check in the CI agent.
+    setTimeout(() => window.ChatWidget.sendSystem('__ping__'), 300);
   }
   // el.btnValidate.click(); // no auto-validate; bot will offer autofill first
   el.file.value = '';
@@ -187,7 +189,8 @@ function makePayload(){
     person: {
       cnp: el.cnp.value.trim(), nume: el.nume.value.trim(), prenume: el.prenume.value.trim(),
       email: el.email.value.trim(), telefon: el.telefon.value.trim(),
-      domiciliu: { adresa: el.adresa.value.trim(), docTip: el.docTip.value }
+        adresa: el.adresa.value.trim(),
+        domiciliu: { adresa: el.adresa.value.trim(), docTip: el.docTip.value }
     },
     application:
         {
@@ -256,7 +259,7 @@ async function fetchAndRenderSlots(locationId) {
 el.btnValidate.onclick = async () => {
 
     if (gateApp.classList.contains('dim')) {
-      toast?.('Alege Motiv și Tip cerere mai prima oara.', 'warn', 'Pasul 2 necesar');
+      toast?.('Alege Motiv si Tip cerere mai prima oara.', 'warn', 'Pasul 2 necesar');
       return;
         }
 
@@ -362,7 +365,7 @@ function highlightMissing(missing) {
     el.valMsg.innerHTML = 'Lipsesc documente: ' + missing.join(', ');
   } else {
     el.valMsg.className = 'ok';
-    el.valMsg.textContent = 'Toate documentele sunt în regulă.';
+    el.valMsg.textContent = 'Toate documentele sunt in regula.';
   }
   // DO NOT tick/untick checkboxes here — OCR owns truth.
 }
@@ -387,7 +390,7 @@ window.addEventListener('chat-steps', (ev) => {
       if (list.length) {
         toast(`Mai lipsesc: ${list.join(', ')}`, 'warn', 'Documente lipsa');
       } else {
-        toast('Toate documentele sunt în regulă.', 'ok', 'Validare');
+        toast('Toate documentele sunt in regula.', 'ok', 'Validare');
       }
       // keep your existing UI highlights if you already do them:
       if (typeof highlightMissing === 'function') highlightMissing(list);
@@ -399,7 +402,7 @@ window.addEventListener('chat-steps', (ev) => {
       if (f.nume && el.nume) el.nume.value = f.nume;
       if (f.prenume && el.prenume) el.prenume.value = f.prenume;
       if (f.adresa && el.adresa) el.adresa.value = f.adresa;
-      toast('Am completat automat câmpurile din OCR. Verifică și corectează dacă e nevoie.', 'ok', 'Autofill');
+      toast('Am completat automat câmpurile din OCR. Verifica si corecteaza daca e nevoie.', 'ok', 'Autofill');
     }
     if (step.slots) {
       toast(`Am gasit ${step.slots.length} sloturi`, 'info', 'Programari');
@@ -424,7 +427,6 @@ window.addEventListener('chat-steps', (ev) => {
 
 // Also refresh recognized docs after each upload (in case OCR ran server-side)
 async function refreshDocsFromOCR(){
-  const sid = new URLSearchParams(location.search).get('sid');
   const r = await fetch(`/uploads?session_id=${encodeURIComponent(sid)}`);
   if(!r.ok) return;
   const j = await r.json();

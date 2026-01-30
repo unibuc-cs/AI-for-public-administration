@@ -72,7 +72,7 @@ def _extract_person_fields_from_text(raw: str) -> dict:
             out.setdefault("prenume", parts[0].title())
             out.setdefault("nume", " ".join(parts[1:]).title())
 
-    addr = after_kw("domiciliu") or after_kw("adresa") or after_kw("adresă")
+    addr = after_kw("domiciliu") or after_kw("adresa")
     if addr and len(addr) >= 5:
         out.setdefault("adresa", addr)
     else:
@@ -189,16 +189,16 @@ class CIAgent(Agent):
                 state["app"] = app
                 state["return_to"] = self.name
                 state["next_agent"] = "doc_intake"
-                state["reply"] = "Am detectat documente încarcate. Le analizez (OCR) si revin cu o propunere de completare automata."
+                state["reply"] = "Am detectat documente incarcate. Le analizez (OCR) si revin cu o propunere de completare automata."
                 return state
 
         if last_id is not None and isinstance(app, dict):
             offered_for = app.get("autofill_offered_for_upload_id")
             if offered_for != last_id:
                 fields, sources = _best_fields_from_uploads(sid)
+                app["autofill_offered_for_upload_id"] = last_id # mark as offered for this upload id
                 if fields:
                     app["pending_autofill_fields"] = fields
-                    app["autofill_offered_for_upload_id"] = last_id
                     state["app"] = app
 
                     def fmt(k, label):
@@ -212,10 +212,10 @@ class CIAgent(Agent):
                         fmt("adresa", "Adresa"),
                     ]
                     lines = [x for x in lines if x]
-                    src = ", ".join(sources) if sources else "documentele încarcate"
+                    src = ", ".join(sources) if sources else "documentele incarcate"
 
                     state["reply"] = (
-                            f"Am analizat {src} și am gasit:\n"
+                            f"Am analizat {src} si am gasit:\n"
                             + "\n".join(lines)
                             + "\n\nVrei sa completez automat aceste date in formular? (da/nu)"
                     )
@@ -237,8 +237,8 @@ class CIAgent(Agent):
             # Only nudge when user is asking about scheduling or starting the flow.
             if (not msg) or any(k in msg for k in ["program", "programare", "slot", "programeaza", "vreau", "ajuta"]):
                 state["reply"] = (
-                    "Pentru CI, te rog mai întâi să alegi un interval din lista **Slots** (sus), apoi apasă **Use this slot**. "
-                    "După aceea pot verifica actele și te ghidez mai departe."
+                    "Pentru CI, te rog mai intai sa alegi un interval din lista Slots (sus), apoi apasa Use this slot. "
+                    "Dupa aceea pot verifica actele si te ghidez mai departe."
                 )
                 state["next_agent"] = None
                 return state
@@ -246,7 +246,7 @@ class CIAgent(Agent):
         # 0.5) If selected but not phase2_ok:
         if selected_slot_id and not type_elig_confirmed:
             state["reply"] = (
-                "Am retinut programarea. Acum, te rog alege **Motiv** si **Tip cerere** (Pasul 2)."
+                "Am retinut programarea. Acum, te rog alege Motiv si Tip cerere (Pasul 2)."
             )
             state["next_agent"] = None
             return state
@@ -256,7 +256,7 @@ class CIAgent(Agent):
             if isinstance(app, dict):
                 app["eligibility_reason"] = "CHANGE_ADDR"
                 state["app"] = app
-            state["reply"] = "Pentru **Viza reședinta**, motivul trebuie sa fie **Schimbare adresa/resedinta**."
+            state["reply"] = "Pentru Viza resedinta, motivul trebuie sa fie Schimbare adresa/resedinta."
             state["next_agent"] = None
             return state
 

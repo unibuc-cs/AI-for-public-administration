@@ -162,7 +162,7 @@ flowchart LR
 3. Start for 2 with doc_intake_agent.py and scheduling_agent.py. which are obvious
 4. Other cases for deeper LLM agents:
     - users write “Vreau buletin pentru fiu” → regex might miss, LLM maps to ci
-    - users write “am nevoie de ajutorul acela social de la primărie, știi tu” → LLM still maps to social
+    - users write “am nevoie de ajutorul acela social de la primarie, stii tu” → LLM still maps to social
     - LLM can extract slot id even if user writes “ia-l pe al doilea” (you can prompt it to resolve ordinals)
     - We can do few-shot prompting: give 2–3 examples from your flows and improve accuracy.
 
@@ -224,9 +224,9 @@ graph.add_edge("unemployment", "scheduling")                 # if appointment ne
 - **start CI**: “carte de identitate”, “ci noua”, “create new ci”
 - **docs Q&A**: “ce documente/ce acte/what documents”
 - **mark doc present**: “am [certificat de nastere | ci veche | dovada adresa]”
-- **done uploading**: “gata”, “am încărcat”, “ready”
-- **show slots**: “arată sloturi”, “show slots”
-- **schedule by slot id**: “programează slot 123…”, “schedule 123…”
+- **done uploading**: “gata”, “am incarcat”, “ready”
+- **show slots**: “arata sloturi”, “show slots”
+- **schedule by slot id**: “programeaza slot 123…”, “schedule 123…”
 
 ---
 
@@ -282,7 +282,7 @@ uvicorn main:app --reload --port 8000
 - Chat UI: `http://localhost:8000/`  
 - Operator UI: `http://localhost:8000/operator`  
 - CEI-HUB mock (mounted): `http://localhost:8000/hub/...`  
-- Primărie mock (mounted): `http://localhost:8000/local/...`
+- Primarie mock (mounted): `http://localhost:8000/local/...`
 
 ### 2) Split processes (classic)
 ```bash
@@ -293,7 +293,7 @@ uvicorn main:app --reload --port 8000
 ```
 
 - CEI-HUB: `http://localhost:8001/...`  
-- Primărie: `http://localhost:8002/...`  
+- Primarie: `http://localhost:8002/...`  
 - Main app: `http://localhost:8000/`
 
 > In **mounted** mode, defaults for `HUB_URL` and `LOCAL_URL` are `http://localhost:8000/hub` and `http://localhost:8000/local`.  
@@ -354,7 +354,7 @@ AUTH_SECRET=please_change_me
 │   └── tools.py                # Tools (eligibility/docs/case/payment/sign/schedule/notify/ocr)
 ├── services/
 │   ├── cei_hub_mock.py         # Mock CEI-HUB: slots + appointments (reschedule/cancel), persisted
-│   └── primarie_local_mock.py  # Mock Primărie: cases/pay/sign/uploads/webhooks/tasks, persisted
+│   └── primarie_local_mock.py  # Mock Primarie: cases/pay/sign/uploads/webhooks/tasks, persisted
 ├── templates/
 │   ├── chat.html               # Chat playground (user)
 │   ├── operator.html           # Operator dashboard (HITL)
