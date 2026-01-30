@@ -3,6 +3,7 @@
 from __future__ import annotations
 import os
 import httpx
+from agents.http_client import make_async_client
 from .base import Agent, AgentState
 
 HUB_URL = os.getenv("HUB_URL", "http://127.0.0.1:8000/hub")
@@ -18,12 +19,12 @@ class SchedulingAgent(Agent):
 
         # Show slots
         if app.get("type") == "CEI":
-            async with httpx.AsyncClient() as client:
+            async with make_async_client() as client:
                 slots = (await client.get(f"{HUB_URL}/slots")).json()
             steps.append({"slots": slots})
             state["reply"] = "Here are CEI slots. Say: 'programeaza slot <id>'"
         elif app.get("program") == "AS":
-            async with httpx.AsyncClient() as client:
+            async with make_async_client() as client:
                 slots = (await client.get(f"{LOCAL_URL}/slots-social")).json()
             steps.append({"slots": slots})
             state["reply"] = "Here are local slots for Ajutor social. Say: 'programeaza slot <id>'"

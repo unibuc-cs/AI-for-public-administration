@@ -13,7 +13,7 @@
 
 import os, io, mimetypes, uuid
 from typing import Optional
-
+from agents.http_client import make_async_client
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -188,7 +188,7 @@ async def operator_ui(request: Request):
     if not user:
         return RedirectResponse("/login", status_code=303)
 
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         cases = (await client.get(f"{LOCAL_URL}/cases")).json()
         slots = (await client.get(f"{HUB_URL}/slots", params={"location_id":"Bucuresti-S1"})).json()
         tasks = (await client.get(f"{LOCAL_URL}/tasks")).json()
@@ -214,7 +214,7 @@ async def operator_advance(request: Request, case_id: str = Form(...), next_stat
     if not user:
         return RedirectResponse("/login", status_code=303)
 
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         await client.patch(f"{LOCAL_URL}/cases/{case_id}", params={"status": next_status})
 
     return RedirectResponse(url="/operator", status_code=303)
@@ -229,7 +229,7 @@ async def op_slots(request: Request):
     if not user:
         return RedirectResponse("/login", status_code=303)
 
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         r = await client.get(f"{HUB_URL}/slots", params={"location_id":"Bucuresti-S1"})
         return r.json()
 
@@ -245,7 +245,7 @@ async def op_reschedule(request: Request, case_id: str = Form(...), appt_id: str
     if not user:
         return RedirectResponse("/login", status_code=303)
 
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         base = str(request.base_url).rstrip("/")
         r = await client.post(f"{base}/api/reschedule", json={"appt_id": appt_id, "new_slot_id": slot_id})
         r.raise_for_status()
@@ -263,7 +263,7 @@ async def op_cancel(request: Request, case_id: str = Form(...), appt_id: str = F
     if not user:
         return RedirectResponse("/login", status_code=303)
 
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         base = str(request.base_url).rstrip("/")
         r = await client.post(f"{base}/api/cancel", json={"appt_id": appt_id})
         r.raise_for_status()
@@ -282,7 +282,7 @@ async def claim_task(request: Request, task_id: int = Form(...)):
     if not user:
         return RedirectResponse("/login", status_code=303)
 
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         await client.post(f"{LOCAL_URL}/tasks/{task_id}/claim", json={"assignee": user["email"]})
 
     return RedirectResponse("/operator", status_code=303)
@@ -297,7 +297,7 @@ async def done_task(request: Request, task_id: int = Form(...), notes: str = For
     if not user:
         return RedirectResponse("/login", status_code=303)
 
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         await client.post(f"{LOCAL_URL}/tasks/{task_id}/complete", json={"notes": notes})
 
     return RedirectResponse("/operator", status_code=303)
@@ -349,7 +349,7 @@ async def upload_doc(
     # Forward to Primarie Locala OCR mock
     files = {"file": (file.filename, content, mime)}
     data = {"kind_hint": kind_hint, "sid": sid}
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         r = await client.post(f"{LOCAL_URL}/uploads", files=files, data=data)
         r.raise_for_status()
         ocr = r.json() if r.content else {}
@@ -410,7 +410,7 @@ async def uploads_purge(session_id: str):
     """Public API: purge uploads for a session (DB + local mock best-effort)."""
     # Best-effort purge on the local mock
     try:
-        async with httpx.AsyncClient() as client:
+        async with make_async_client() as client:
             await client.delete(f"{LOCAL_URL}/uploads/purge", params={"session_id": session_id})
     except Exception:
         pass

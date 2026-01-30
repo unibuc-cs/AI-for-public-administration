@@ -2,7 +2,8 @@
   "eligibility_rules": {
     "EXP_60": "CI expiră în ≤60 zile sau a expirat recent",
     "AGE_14": "Persoana a împlinit 14 ani (prima CI)",
-    "CHANGE": "Schimbare nume/domiciliu/stare civilă",
+    "CHANGE_NAME": "Schimbare nume",
+    "CHANGE_ADDR": "Schimbare adresa/Stabilire resedinta sau viza flotant",
     "LOSS": "Pierderea, furtul sau deteriorarea CI"
   },
   "doc_kinds": [
@@ -15,7 +16,7 @@
   "fees": {
     "CEI": { "first_free": true, "default": 70 },
     "CIS": { "default": 40 },
-    "CIP": { "default": 1 }
+    "VR": {"default" :  1}
   },
   "notes": [
     "Pentru CEI, programările se fac pe HUB MAI (serverul mock 8001).",

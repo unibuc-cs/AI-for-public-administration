@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import httpx
 from .base import Agent, AgentState
+from agents.http_client import make_async_client
 
 LOCAL_URL = os.getenv("LOCAL_URL", "http://127.0.0.1:8000/local")
 
@@ -16,7 +17,7 @@ class CaseAgent(Agent):
 
         payload = {"person": person, "application": app}
 
-        async with httpx.AsyncClient() as client:
+        async with make_async_client() as client:
             r = await client.post(f"{LOCAL_URL}/cases", json=payload)
             case = r.json()
 

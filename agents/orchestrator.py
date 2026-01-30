@@ -40,10 +40,11 @@ from pydantic import BaseModel, Field
 from agents.graph import run_agent_graph
 import httpx
 import re
+from agents.http_client import make_async_client
 
 # Import tools (side-effect functions) and RAG helper
 from agents.tools import (
-    tool_eligibility, tool_docs_required, tool_docs_missing,
+    tool_docs_required, tool_docs_missing,
     tool_case_submit, tool_payment, tool_signature, tool_schedule,
     tool_reschedule, tool_cancel_appointment, tool_upload,
     tool_notify_email, tool_notify_sms, tool_schedule_by_slot
@@ -71,7 +72,6 @@ def _state(sid: str) -> Dict[str, Any]:
             "person": {},
             "app": {"type": "auto", "eligibility_reason": "EXP_60", "docs": []},
             "missing": [],
-            "decided_type": None,
         }
     return SESS_STATE[sid]
 
@@ -164,7 +164,7 @@ def _toast_err(title: str, msg: str):
 async def _recognized_docs_from_ocr(sid: str) -> list[dict]:
     """Query Primarie /local/uploads and turn recognized kinds into doc list."""
     try:
-        async with httpx.AsyncClient() as client:
+        async with make_async_client() as client:
             j = (await client.get(f"{os.getenv('LOCAL_URL','http://127.0.0.1:8000/local')}/uploads",
                                   params={"session_id": sid},
                                   headers={"X-Caller": "orchestrator_recognized_docs_from_ocr"})).json()
@@ -262,12 +262,10 @@ def validate_api(data: ValidateIn):
     - Return messages the UI can show inline
     """
     app = data.application.model_dump() if data.application else {"type":"auto","eligibility_reason":"EXP_60","docs":[]}
-    elig = tool_eligibility(app.get("eligibility_reason","EXP_60"))
-    if app.get("type","auto") == "auto":
-        app["type"] = elig["decided_type"]
+    eligibility_reason = app["eligibility_reason"]
 
 
-    missing = tool_docs_missing(app["type"], app.get("docs", []))["missing"]
+    missing = tool_docs_missing(app["type"], app["eligibility_reason"], app.get("docs", []))["missing"]
     # Simple person checks (extend as needed)
     errors = []
     pj = data.person.model_dump() if data.person else {}
@@ -279,7 +277,8 @@ def validate_api(data: ValidateIn):
     return {
         "valid": len(errors)==0,
         "errors": errors,
-        "decided_type": app["type"],
+        "type": app["type"],
+        "eligibility_reason" : app["eligibility_reason"],
         "missing": missing
     }
 
@@ -297,7 +296,7 @@ async def create_case_api(data: CreateCaseIn):
     app = data.application.model_dump()
 
     # if user selected "auto", you decide before this point;
-    # here we just enforce that 'type' is actually present ("CEI", "CIS", "CIP")
+    # here we just enforce that 'type' is actually present ("CEI", "CIS", "VR")
     if not app.get("type"):
         # fallback to CEI or whatever your decision logic computed earlier
         app["type"] = "CEI"
@@ -330,7 +329,7 @@ async def list_slots_api(location_id: Optional[str] = None):
     """
     import os, httpx
     HUB_URL = os.getenv("HUB_URL", "http://127.0.0.1:8000/hub")
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         r = await client.get(f"{HUB_URL}/slots", params={"location_id": location_id} if location_id else None)
         return r.json()
 
@@ -355,14 +354,14 @@ async def schedule_api(data: ScheduleIn):
 @router.get("/slots-social")
 async def api_slots_social(location_id: Optional[str] = None):
     LOCAL_URL = os.getenv("LOCAL_URL", "http://127.0.0.1:8000/local")
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         r = await client.get(f"{LOCAL_URL}/slots-social", params={"location_id": location_id} if location_id else None)
         return r.json()
 
 @router.post("/schedule-social")
 async def api_schedule_social(payload: dict):
     LOCAL_URL = os.getenv("LOCAL_URL", "http://127.0.0.1:8000/local")
-    async with httpx.AsyncClient() as client:
+    async with make_async_client() as client:
         r = await client.post(f"{LOCAL_URL}/reserve-social", json=payload)
         r.raise_for_status()
         return r.json()

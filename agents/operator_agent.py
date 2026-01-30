@@ -13,6 +13,7 @@ from .base import Agent, AgentState
 from .settings import LLM_USE
 from .identifiers import allowed_operator_actions, allowed_case_statuses
 from .llm_utils import parse_operator_command_with_llm
+from agents.http_client import make_async_client
 
 _ACTIONS = allowed_operator_actions()
 _CASE_STATUSES = allowed_case_statuses()
@@ -93,7 +94,7 @@ class OperatorAgent(Agent):
             status = None
 
         # 3) Execute
-        async with httpx.AsyncClient() as client:
+        async with make_async_client() as client:
             if action == "list_tasks":
                 tasks = (await client.get(f"{LOCAL_URL}/tasks")).json()
                 state.setdefault("steps", []).append({"tasks": tasks})

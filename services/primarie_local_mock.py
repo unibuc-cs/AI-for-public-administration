@@ -13,6 +13,7 @@ from fastapi import Request, Response
 import json
 import os
 import io
+import re
 import traceback
 import uuid
 from datetime import datetime, timedelta
@@ -77,7 +78,88 @@ def _ocr_text_from_bytes(content: bytes) -> str:
             return "\n".join([str(x) for x in out if x])
         return str(out)
     except Exception:
+        print(traceback.format_exc())
         return ""
+        
+
+def _extract_person_fields_from_text(raw: str) -> dict:
+    """Best-effort extraction of person fields from OCR text (CI / certificat nastere).
+    Prototype heuristics: extract CNP (13 digits), name lines around keywords, and address around DOMICILIU/ADRESA.
+    Returns keys: prenume, nume, cnp, adresa (if found).
+    """
+    t = (raw or "")
+    if not t.strip():
+        return {}
+
+    # normalize
+    lines = [re.sub(r"\s+", " ", ln).strip() for ln in t.splitlines()]
+    lines = [ln for ln in lines if ln]
+    low = "\n".join(lines).lower()
+
+    out: dict = {}
+
+    # CNP: 13 consecutive digits
+    m = re.search(r"\b(\d{13})\b", low)
+    if m:
+        out["cnp"] = m.group(1)
+
+    # Helper to find value after keyword in same line: "Prenume: X"
+    def after_kw(keyword: str) -> str | None:
+        for ln in lines:
+            lnl = ln.lower()
+            if keyword in lnl:
+                # take substring after keyword
+                idx = lnl.find(keyword) + len(keyword)
+                val = ln[idx:].strip(" :-\t")
+                # if empty, maybe next line contains it
+                if not val:
+                    # pick next non-empty line
+                    i = lines.index(ln)
+                    if i + 1 < len(lines):
+                        return lines[i+1].strip()
+                    return None
+                return val
+        return None
+
+    # Romanian keywords frequently present
+    # CI: "Nume", "Prenume"
+    v = after_kw("prenume")
+    if v and len(v) >= 2:
+        out.setdefault("prenume", v.title() if v.isupper() else v)
+    v = after_kw("nume")
+    if v and len(v) >= 2:
+        # avoid catching "Nume/Nom/Last name" headers by requiring a token beyond header patterns
+        if "last name" not in v.lower() and "nom" not in v.lower():
+            out.setdefault("nume", v.title() if v.isupper() else v)
+
+    # Birth certificate sometimes has "Nume si prenume" / "Numele"
+    if "prenume" not in out or "nume" not in out:
+        v = after_kw("nume si prenume")
+        if v and len(v.split()) >= 2:
+            parts = v.split()
+            out.setdefault("prenume", parts[0].title())
+            out.setdefault("nume", " ".join(parts[1:]).title())
+
+    # Address: look for "domiciliu" or "adresa"
+    addr = after_kw("domiciliu") or after_kw("adresa") or after_kw("adresa")
+    if addr and len(addr) >= 5:
+        out.setdefault("adresa", addr)
+    else:
+        # fallback: line containing "str." or "calea" etc.
+        for ln in lines:
+            lnl = ln.lower()
+            if (" str" in lnl or lnl.startswith("str") or "calea" in lnl or "bd" in lnl or "bulevard" in lnl):
+                if len(ln) >= 8:
+                    out.setdefault("adresa", ln)
+                    break
+
+    # Clean up obvious OCR artifacts
+    for k in list(out.keys()):
+        v = str(out[k]).strip()
+        if not v or v.lower() in ("null", "none"):
+            out.pop(k, None)
+    return out
+
 
 local = APIRouter(tags=["local"])
 
@@ -212,6 +294,7 @@ def list_uploads(request: Request, session_id: str = Query(..., alias="session_i
             "kind": u.kind,
             "size": u.size,
             "ocr_text": u.ocr_text,
+            "fields": _extract_person_fields_from_text(u.ocr_text or ""),
         })
         if u.kind:
             recognized.add(u.kind)
@@ -232,7 +315,6 @@ def purge_uploads(session_id: str = Query(..., alias="session_id")):
 
 
 # --------------------------- social slots (AS) ---------------------------
-
 def _seed_social_slots():
     with Session(engine) as s:
         has_any = s.exec(select(SocialSlot)).first()
@@ -280,7 +362,6 @@ def reserve_social(payload: Dict[str, Any]):
 
 
 # --------------------------- cases ---------------------------
-
 @local.post("/cases")
 def create_case(payload: Dict[str, Any]):
     """
@@ -353,9 +434,7 @@ def update_case_status(case_id: str, status: str = Query(...)):
         s.commit()
     return {"ok": True, "case_id": case_id, "status": status}
 
-
 # --------------------------- tasks (HITL) ---------------------------
-
 @local.get("/tasks")
 def list_tasks(type: Optional[str] = None, status: Optional[str] = None):
     """

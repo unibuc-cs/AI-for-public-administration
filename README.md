@@ -216,7 +216,6 @@ graph.add_edge("unemployment", "scheduling")                 # if appointment ne
 - `person`
 - `app`
 - `missing`
-- `decided_type`
 
 ---
 
