@@ -20,8 +20,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
 import httpx
-import uuid, json
+import json
 from debug_http import log_requests
+from db import getRandomSessionId
+
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 # Running mode: "mounted" (default) runs the mock services as separate processes,
 # "split" mounts them as sub-apps (easier for local testing, but not realistic).
@@ -51,10 +56,6 @@ LOCAL_URL = os.getenv("LOCAL_URL", _default_local)
 
 # Create main FastAPI app and include orchestrator API at /api/*
 app = FastAPI(title=APP_TITLE)
-
-
-
-
 
 app.include_router(orch_router, prefix="/api")
 #app.middleware("http")(log_requests)
@@ -103,21 +104,24 @@ def local_health_hint():
 
 # CI case
 @app.get("/user-ci", response_class=HTMLResponse)
-async def user_ci_page(request: Request, sid: str = "form-1"):
-    """
-    Render the guided CI form (Person + Application).
-    The page uses /api/validate, /api/create_case, /api/slots, /api/schedule.
-    """
-    return templates.TemplateResponse("user_ci.html", {"request": request, "app_title": APP_TITLE, "sid": sid, "ui_context": "ci"})
+async def user_ci_page(request: Request, sid: Optional[str] = None):
+    if not sid:
+        sid = f"ci-{getRandomSessionId()}"
 
+    return templates.TemplateResponse(
+        "user_ci.html",
+        {"request": request, "app_title": APP_TITLE, "sid": sid, "ui_context": "ci"}
+    )
 # Social case
 @app.get("/user-social", response_class=HTMLResponse)
-async def user_social_page(request: Request, sid: str = "form-1"):
-    """
-    Render the guided AS - Asistenta Sociala  form (Person + Application).
-    The page uses /api/validate, /api/create_case, /api/slots, /api/schedule.
-    """
-    return templates.TemplateResponse("user_social.html", {"request": request, "app_title": APP_TITLE, "sid": sid, "ui_context": "social"})
+async def user_social_page(request: Request, sid: Optional[str] = None):
+    if not sid or "public" in sid:
+        sid = f"social-{getRandomSessionId()}"
+
+    return templates.TemplateResponse(
+        "user_social.html",
+        {"request": request, "app_title": APP_TITLE, "sid": sid, "ui_context": "social"}
+    )
 
 # --------------------------- AUTH PAGES ---------------------------
 

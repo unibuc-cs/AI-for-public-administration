@@ -1,3 +1,8 @@
+# TODOs
+
+- Always shown Step3/3 or something when selecting the same thing.
+- Avoid Same-step in the chat as before.
+- 
 ## Current state
 # 1. Current State vs. Agentic AI
 

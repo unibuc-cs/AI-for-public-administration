@@ -23,13 +23,17 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, Fas
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 
+
 from db import (
     engine, init_db,
     Case, Payment, Signature, Notification,
     Upload as UploadRec,
     Task,
-    SocialSlot, HubSlot, HubAppt
+    SocialSlot, HubSlot, HubAppt,
+    AuditLog,
 )
+
+from .ocr_utils import extract_person_fields, validate_person_simple
 
 # Ensure tables exist
 init_db()
@@ -83,82 +87,8 @@ def _ocr_text_from_bytes(content: bytes) -> str:
         
 
 def _extract_person_fields_from_text(raw: str) -> dict:
-    """Best-effort extraction of person fields from OCR text (CI / certificat nastere).
-    Prototype heuristics: extract CNP (13 digits), name lines around keywords, and address around DOMICILIU/ADRESA.
-    Returns keys: prenume, nume, cnp, adresa (if found).
-    """
-    t = (raw or "")
-    if not t.strip():
-        return {}
-
-    # normalize
-    lines = [re.sub(r"\s+", " ", ln).strip() for ln in t.splitlines()]
-    lines = [ln for ln in lines if ln]
-    low = "\n".join(lines).lower()
-
-    out: dict = {}
-
-    # CNP: 13 consecutive digits
-    m = re.search(r"\b(\d{13})\b", low)
-    if m:
-        out["cnp"] = m.group(1)
-
-    # Helper to find value after keyword in same line: "Prenume: X"
-    def after_kw(keyword: str) -> str | None:
-        for ln in lines:
-            lnl = ln.lower()
-            if keyword in lnl:
-                # take substring after keyword
-                idx = lnl.find(keyword) + len(keyword)
-                val = ln[idx:].strip(" :-\t")
-                # if empty, maybe next line contains it
-                if not val:
-                    # pick next non-empty line
-                    i = lines.index(ln)
-                    if i + 1 < len(lines):
-                        return lines[i+1].strip()
-                    return None
-                return val
-        return None
-
-    # Romanian keywords frequently present
-    # CI: "Nume", "Prenume"
-    v = after_kw("prenume")
-    if v and len(v) >= 2:
-        out.setdefault("prenume", v.title() if v.isupper() else v)
-    v = after_kw("nume")
-    if v and len(v) >= 2:
-        # avoid catching "Nume/Nom/Last name" headers by requiring a token beyond header patterns
-        if "last name" not in v.lower() and "nom" not in v.lower():
-            out.setdefault("nume", v.title() if v.isupper() else v)
-
-    # Birth certificate sometimes has "Nume si prenume" / "Numele"
-    if "prenume" not in out or "nume" not in out:
-        v = after_kw("nume si prenume")
-        if v and len(v.split()) >= 2:
-            parts = v.split()
-            out.setdefault("prenume", parts[0].title())
-            out.setdefault("nume", " ".join(parts[1:]).title())
-
-    # Address: look for "domiciliu" or "adresa"
-    addr = after_kw("domiciliu") or after_kw("adresa") or after_kw("adresa")
-    if addr and len(addr) >= 5:
-        out.setdefault("adresa", addr)
-    else:
-        # fallback: line containing "str." or "calea" etc.
-        for ln in lines:
-            lnl = ln.lower()
-            if (" str" in lnl or lnl.startswith("str") or "calea" in lnl or "bd" in lnl or "bulevard" in lnl):
-                if len(ln) >= 8:
-                    out.setdefault("adresa", ln)
-                    break
-
-    # Clean up obvious OCR artifacts
-    for k in list(out.keys()):
-        v = str(out[k]).strip()
-        if not v or v.lower() in ("null", "none"):
-            out.pop(k, None)
-    return out
+    # Backwards compatible wrapper used by existing endpoints.
+    return extract_person_fields(raw or "")
 
 
 local = APIRouter(tags=["local"])
@@ -191,6 +121,23 @@ def _infer_program_from_application(app: Dict[str, Any]) -> str:
     if "type" in app and app["type"]:
         return str(app["type"])
     return "UNKNOWN"
+
+
+def _audit(actor: str, action: str, entity_type: str = "", entity_id: str = "", details: Any = None) -> None:
+    """Minimal audit logging for operator-facing traceability (prototype level)."""
+    try:
+        with Session(engine) as s:
+            s.add(AuditLog(
+                actor=actor or "system",
+                action=action,
+                entity_type=entity_type or "",
+                entity_id=entity_id or "",
+                details_json=_write_json(details or {}),
+            ))
+            s.commit()
+    except Exception:
+        # Never break the demo because audit failed.
+        pass
 
 # Very light OCR keyword map for both CI and AS
 DOC_KEYWORDS = {
@@ -258,6 +205,13 @@ async def upload_file(
         s.add(rec)
         s.commit()
         s.refresh(rec)
+
+    _audit(actor="system", action="UPLOAD_CREATE", entity_type="upload", entity_id=str(rec.id), details={
+        "session_id": sid,
+        "filename": file.filename,
+        "kind": kind,
+        "size": len(content),
+    })
 
     return {
         "ok": True,
@@ -374,6 +328,11 @@ def create_case(payload: Dict[str, Any]):
     """
     person = payload.get("person") or {}
     app = payload.get("application") or {}
+
+    # Minimal validation (prototype).
+    errs = validate_person_simple(person)
+    if errs:
+        raise HTTPException(status_code=400, detail={"errors": errs})
     program_or_type = _infer_program_from_application(app)
 
     case_id = _gen_case_id(prefix="CASE")
@@ -388,6 +347,11 @@ def create_case(payload: Dict[str, Any]):
         s.add(row)
         s.commit()
         s.refresh(row)
+
+    _audit(actor="system", action="CASE_CREATE", entity_type="case", entity_id=row.case_id, details={
+        "type": row.type,
+        "status": row.status,
+    })
 
     return {
         "case_id": row.case_id,
@@ -432,6 +396,10 @@ def update_case_status(case_id: str, status: str = Query(...)):
         row.status = status
         s.add(row)
         s.commit()
+
+    _audit(actor="system", action="CASE_STATUS_UPDATE", entity_type="case", entity_id=case_id, details={
+        "new_status": status,
+    })
     return {"ok": True, "case_id": case_id, "status": status}
 
 # --------------------------- tasks (HITL) ---------------------------
@@ -474,6 +442,11 @@ def claim_task(task_id: int, payload: Dict[str, Any]):
         s.add(t)
         s.commit()
         s.refresh(t)
+
+    _audit(actor=assignee, action="TASK_CLAIM", entity_type="task", entity_id=str(task_id), details={
+        "case_id": t.case_id,
+        "kind": t.kind,
+    })
     return {"ok": True, "task": {"id": t.id, "status": t.status, "assignee": t.assignee}}
 
 
@@ -489,7 +462,32 @@ def complete_task(task_id: int, payload: Dict[str, Any]):
         s.add(t)
         s.commit()
         s.refresh(t)
+
+    _audit(actor=str(t.assignee or "operator@demo.local"), action="TASK_COMPLETE", entity_type="task", entity_id=str(task_id), details={
+        "case_id": t.case_id,
+        "kind": t.kind,
+    })
     return {"ok": True, "task": {"id": t.id, "status": t.status, "notes": t.notes}}
+
+
+@local.get("/audit")
+def list_audit(limit: int = 100):
+    """Return latest audit entries (prototype debug endpoint)."""
+    limit = max(1, min(int(limit or 100), 500))
+    with Session(engine) as s:
+        rows = s.exec(select(AuditLog).order_by(AuditLog.id.desc()).limit(limit)).all()
+    out = []
+    for r in rows:
+        out.append({
+            "id": r.id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "actor": r.actor,
+            "action": r.action,
+            "entity_type": r.entity_type,
+            "entity_id": r.entity_id,
+            "details": _read_json(r.details_json),
+        })
+    return out
 
 app = FastAPI(title="Primarie local mock")
 app.include_router(local)

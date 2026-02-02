@@ -32,6 +32,7 @@ def _upsert_doc(docs: List[Dict[str, Any]], kind: str) -> None:
     docs.append({"kind": kind, "status": "ok"})
 
 
+
 class DocIntakeAgent(Agent):
     name = "doc_intake"
 
@@ -49,6 +50,30 @@ class DocIntakeAgent(Agent):
                 "thumb": u.thumb,
             })
         return items
+
+    def _guess_kind(self, it: Dict[str, Any]) -> str:
+        fn = (it.get("filename") or "").lower()
+        txt = (it.get("ocr_text") or "").lower()
+
+        # Identity card (CI)
+        if ("carte" in txt and "identitate" in txt) or ("cnp" in txt and "seria" in txt):
+            return "ci_veche"
+        if "ci" in fn or "buletin" in fn:
+            return "ci_veche"
+
+        # Birth certificate
+        if ("certificat" in txt and "naster" in txt) or ("certificat de nastere" in txt):
+            return "cert_nastere"
+        if "nastere" in fn or "certificat" in fn:
+            return "cert_nastere"
+
+        # Address proof (generic heuristic)
+        if ("domiciliu" in txt and "adresa" in txt) or ("resedinta" in txt and "adresa" in txt):
+            return "dovada_adresa"
+        if ("dovada" in fn and "adresa" in fn) or ("resedinta" in fn):
+            return "dovada_adresa"
+
+        return ""
 
     async def _normalize_kind(self, raw: str, allowed: Set[str]) -> Optional[str]:
         r = (raw or "").strip().lower()
@@ -70,14 +95,21 @@ class DocIntakeAgent(Agent):
         sid = state.get("session_id") or ""
         app = state.get("app") or {}
 
+
+        # Load allowed doc IDs
         allowed = set(allowed_all_doc_ids())
 
+        # Load the uploads for this session from the DB
         items = self._load_uploads(sid)
         recognized: List[str] = []
 
+        # Process each upload and try to recognize its kind
+        #---------
         for it in items:
-            # Prefer explicit kind from OCR/classifier, fallback to nothing.
-            raw_kind = (it.get("kind") or "")
+            raw_kind = it.get("kind")
+            if not raw_kind or raw_kind == "auto":
+                raw_kind = self._guess_kind(it)
+
             norm = await self._normalize_kind(raw_kind, allowed)
             if norm:
                 recognized.append(norm)
@@ -89,7 +121,10 @@ class DocIntakeAgent(Agent):
             if k not in seen:
                 seen.add(k)
                 recognized_uniq.append(k)
+        #---------
 
+
+        # Update app['docs'] with recognized document kinds
         docs = app.get("docs") or []
         if not isinstance(docs, list):
             docs = []
@@ -100,6 +135,7 @@ class DocIntakeAgent(Agent):
         app["docs"] = docs
         state["app"] = app
 
+        # Sets the step for next agents about the upload results
         state.setdefault("steps", []).append({
             "uploads": {
                 "count": len(items),

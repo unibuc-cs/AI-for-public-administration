@@ -11,6 +11,7 @@
 from datetime import datetime
 from typing import Optional
 from sqlmodel import Field, SQLModel, create_engine, Session
+import uuid
 
 # SQLite database URL; change to a file path as needed
 DB_URL = "sqlite:///./mcp_demo.db"
@@ -18,6 +19,10 @@ engine = create_engine(DB_URL, echo=False)
 
 
 # --------------------------- TABLE MODELS ---------------------------
+
+def getRandomSessionId():
+    sid = uuid.uuid4().hex
+    return sid
 
 class Case(SQLModel, table=True):
     """
@@ -103,6 +108,18 @@ class Task(SQLModel, table=True):
     assignee: Optional[str] = None
     notes: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AuditLog(SQLModel, table=True):
+    """Minimal audit log table for prototype traceability."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    actor: str  # user / operator / system
+    action: str
+    entity_type: str = ""  # case | upload | task | appt | ...
+    entity_id: str = ""
+    details_json: str = "{}"
 
 
 class HubSlot(SQLModel, table=True):

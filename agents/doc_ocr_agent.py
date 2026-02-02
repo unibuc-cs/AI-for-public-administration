@@ -8,52 +8,21 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, Dict, List
 
 from sqlmodel import Session, select
 
 from db import engine, Upload
 from .base import Agent, AgentState
+from services.ocr_utils import extract_person_fields
 
 
 class DocOCRAgent(Agent):
     name = "doc_ocr"
 
     def _extract(self, text: str) -> Dict[str, str]:
-        """Very small regex extractor. Extend per document type later."""
-        t = (text or "")
-        out: Dict[str, str] = {}
-
-        # CNP: 13 digits
-        m = re.search(r"\b(\d{13})\b", t)
-        if m:
-            out["cnp"] = m.group(1)
-
-        # Email
-        m = re.search(r"\b([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b", t)
-        if m:
-            out["email"] = m.group(1)
-
-        # Phone (Romanian style loose)
-        m = re.search(r"\b(0\d{9})\b", t)
-        if m:
-            out["telefon"] = m.group(1)
-
-        # Name-like patterns: "nume: X" / "prenume: Y"
-        m = re.search(r"\bnume\s*[:=]\s*([A-Za-z\- ]{2,})", t, flags=re.IGNORECASE)
-        if m:
-            out["nume"] = m.group(1).strip()
-        m = re.search(r"\bprenume\s*[:=]\s*([A-Za-z\- ]{2,})", t, flags=re.IGNORECASE)
-        if m:
-            out["prenume"] = m.group(1).strip()
-
-        # Address-like pattern: "adresa: ..."
-        m = re.search(r"\badresa\s*[:=]\s*(.{6,120})", t, flags=re.IGNORECASE)
-        if m:
-            out["adresa"] = m.group(1).strip()
-
-        return out
+        """Best-effort extraction for demo OCR text."""
+        return extract_person_fields(text or "")
 
     def _load_uploads(self, sid: str) -> List[Upload]:
         with Session(engine) as ss:
@@ -75,6 +44,7 @@ class DocOCRAgent(Agent):
             state["next_agent"] = state.pop("return_to", None)
             return state
 
+        # Load all uploads for this session (from DB)
         uploads = self._load_uploads(sid)
 
         # Always override latest: apply in upload order, last match wins.
@@ -85,28 +55,41 @@ class DocOCRAgent(Agent):
                 if v:
                     extracted[k] = v
 
+        # Prepare set_fields for the form
         set_fields: Dict[str, str] = {}
         for k in ["cnp", "nume", "prenume", "email", "telefon", "adresa"]:
             if extracted.get(k):
                 set_fields[k] = extracted[k]
 
-        # Also update server-side state.person so the next agent sees the new values.
-        person = state.get("person") or {}
-        if not isinstance(person, dict):
-            person = {}
-
+        app = state.get("app") or {}
         if set_fields:
-            for k, v in set_fields.items():
-                person[k] = v
-            state["person"] = person
+            if not isinstance(app, dict):
+                app = {}
 
-            state.setdefault("steps", []).append({"set_fields": set_fields, "source": "doc_ocr"})
+            # Store the pending fields recognized from OCR such that the UI can render them later
+            app["pending_autofill_fields"] = set_fields
+            state["app"] = app
 
-            miss = self._first_missing(person)
-            if miss:
-                state.setdefault("steps", []).append({"focus": miss})
+            # Friendly preview (ASCII)
+            lines = []
+            for k, label in [("prenume", "Prenume"), ("nume", "Nume"), ("cnp", "CNP"), ("adresa", "Adresa"),
+                             ("email", "Email"), ("telefon", "Telefon")]:
+                if set_fields.get(k):
+                    lines.append(f"{label}: {set_fields[k]}")
 
-            state["reply"] = "Am completat automat campuri din documentele incarcate. Verifica si corecteaza daca e nevoie."
+            # Prompt user to confirm auto-fill
+            state["reply"] = (
+                    "I found these fields from OCR:\n" + "\n".join(lines) +
+                    "\n\nDo you want me to fill them in the form? (da/nu)"
+            )
+        else:
+            app = state.get("app") or {}
+            if not isinstance(app, dict):
+                app = {}
+            app["pending_autofill_fields"] = {}
+            state["app"] = app
+            state["reply"] = "I could not extract usable fields from OCR. You can fill manually."
 
+        # Return to the previous agent set in the flow
         state["next_agent"] = state.pop("return_to", None)
         return state

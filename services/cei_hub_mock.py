@@ -11,7 +11,22 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 import uuid
 from sqlmodel import Session, select
-from db import engine, HubSlot, HubAppt, SocialSlot
+from db import engine, HubSlot, HubAppt, SocialSlot, AuditLog
+
+
+def _write_audit(actor: str, action: str, entity_type: str = "", entity_id: str = "", details: dict | None = None) -> None:
+    try:
+        with Session(engine) as s:
+            s.add(AuditLog(
+                actor=actor or "system",
+                action=action,
+                entity_type=entity_type or "",
+                entity_id=entity_id or "",
+                details_json=__import__("json").dumps(details or {}, ensure_ascii=False),
+            ))
+            s.commit()
+    except Exception:
+        pass
 
 
 app = FastAPI(title="CEI-HUB-MAI (mock)")
@@ -176,9 +191,15 @@ def create_appt(data: AppointmentIn):
         appt = HubAppt(appt_id=appt_id, when=slot.when, location=slot.location_id)
         s.add(appt)
         s.commit()
+        _write_audit(actor="system", action="APPT_CREATE", entity_type="appt", entity_id=appt.appt_id, details={
+            "slot_id": data.slot_id,
+            "location": appt.location,
+            "when": appt.when,
+            "cnp": cnp,
+        })
         return {"appt_id": appt.appt_id,
                 "when": appt.when if hasattr(slot, "when") else slot["when"],
-                "location_id": appt.location}
+                "location": appt.location}
 
 
 @app.patch("/appointments/{appt_id}", response_model=AppointmentOut)
@@ -197,6 +218,11 @@ def reschedule(appt_id: str, data: RescheduleIn):
         a.location = slot.location_id
         s.add(a)
         s.commit()
+        _write_audit(actor="system", action="APPT_RESCHEDULE", entity_type="appt", entity_id=a.appt_id, details={
+            "new_slot_id": data.slot_id,
+            "location": a.location,
+            "when": a.when,
+        })
         return {"appt_id": a.appt_id, "when": a.when, "location": a.location}
 
 
@@ -211,4 +237,8 @@ def cancel(appt_id: str):
             raise HTTPException(404, "not found")
         s.delete(a)
         s.commit()
+        _write_audit(actor="system", action="APPT_CANCEL", entity_type="appt", entity_id=appt_id, details={
+            "location": a.location,
+            "when": a.when,
+        })
         return {"ok": True}

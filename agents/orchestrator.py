@@ -127,6 +127,7 @@ class Application(BaseModel):
     eligibility_reason: Optional[str] = None
     docs: List[Doc] = []
     ui_context: Optional[str] = Field(default="public")
+    selected_slot_id: Optional[str] = None
 
 
 class ChatIn(BaseModel):
@@ -174,6 +175,8 @@ async def _recognized_docs_from_ocr(sid: str) -> list[dict]:
         return []
 
 
+# This is the main chat endpoint that drives the agent graph.
+# UI will POST here with user message + optional structured data and the agent graph will run.
 @router.post("/chat")
 async def chat_api(data: ChatIn):
     state = {
@@ -189,6 +192,22 @@ async def chat_api(data: ChatIn):
         "steps": result.get("steps", []),
         "halted": True,
     }
+
+# A slot selected by the user response
+@router.post("/select_slot")
+async def select_slot_api(data: dict):
+    """
+    User selected a slot from the UI; store in session state.
+    """
+    sid = data.get("session_id")
+    app = data.get("application") or {}
+    slot_id = None if app == {} else app.get("selected_slot_id", None)
+    if not sid or not slot_id:
+        return {"ok": False, "error": "missing session_id or slot_id"}
+
+    st = _state(sid)
+    st["app"]["selected_slot_id"] = slot_id
+    return {"ok": True, "selected_slot_id": slot_id}
 
 # --------------------------- RESCHEDULE / CANCEL ---------------------------
 class ReschedIn(BaseModel):

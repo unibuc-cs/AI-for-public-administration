@@ -48,7 +48,7 @@
                   </div>
                   <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
                     <button id="btnUseSlot" type="button">Use this slot</button>
-                    <span class="muted">Slotul este rezervat temporar.</span>
+                    <span id="slotSelectedStatusText" class="muted">No slot selected yet.</span>
                   </div>
                   <div id="slotPicked" class="muted" style="margin-top:8px"></div>
                 </fieldset>
@@ -126,10 +126,10 @@
                           <div style="flex:1">
                             <label>Tip document
                               <select id="kind_hint" required>
-                                <option value="" selected disabled>Select tip</option>
-                                <option value="cert_nastere">cert_nastere</option>
-                                <option value="ci_veche">ci_veche</option>
-                                <option value="dovada_adresa">dovada_adresa</option>
+                                  <option value="auto">Auto (OCR decides)</option>
+                                  <option value="cert_nastere">cert_nastere</option>
+                                  <option value="ci_veche">ci_veche</option>
+                                  <option value="dovada_adresa">dovada_adresa</option>
                               </select>
                             </label>
                           </div>

@@ -21,20 +21,24 @@
     aside.chat-col { position: sticky; top: 16px; height: calc(100vh - 32px); overflow:auto; }
     .dim { opacity:.45; pointer-events:none; filter: grayscale(40%); }
     input[type="checkbox"]:disabled:checked { accent-color:#0a7f2e; }
+    .topline { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
   </style>
 </head>
 <body data-default-sid="{{ sid }}">
 <div class="two-col">
   <main>
     <div class="card">
-      <h1>Ajutor social (Venit de incluziune) – Cerere</h1>
+      <div class="topline">
+        <h1>Ajutor social (Venit de incluziune) – Cerere</h1>
+        <div class="muted">sid: <span id="sidSpan"></span></div>
+      </div>
 
-      <!-- Slots first (AS slots from Primarie) -->
+      <!-- Step 1/3: Slots first -->
       <fieldset id="slotsBox">
-        <legend>Alege programarea (obligatoriu inainte de completare)</legend>
+        <legend>Step 1/3: Alege programarea (obligatoriu inainte de completare)</legend>
         <div class="row">
           <div>
-            <label>Locație
+            <label>Locatie
               <select id="loc">
                 <option value="Bucuresti-S1">Bucuresti-S1</option>
                 <option value="Ilfov-01">Ilfov-01</option>
@@ -48,17 +52,16 @@
           </div>
         </div>
         <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
-          <button id="btnUseSlot" type="button">Foloseste acest slot</button>
-          <span class="muted">Nu rezerva inca. Doar deblocheaza formularul.</span>
+          <button id="btnUseSlot" type="button">Use this slot</button>
+          <span class="muted">Nu rezerva inca. Doar deblocheaza Step 2.</span>
         </div>
         <div id="slotPicked" class="muted" style="margin-top:8px"></div>
       </fieldset>
 
-      <!-- Gate: form disabled until slot is chosen -->
-      <div id="gate" class="dim">
-        <!-- Person -->
+      <!-- Step 2/3: Eligibility + person -->
+      <div id="gateEligType" class="dim">
         <fieldset>
-          <legend>Date solicitant</legend>
+          <legend>Step 2/3: Date solicitant si motiv</legend>
           <div class="row">
             <label>CNP <input id="cnp"></label>
             <label>Telefon <input id="telefon"></label>
@@ -67,53 +70,54 @@
             <label>Email <input id="email"></label>
             <label>Adresa <input id="adresa"></label>
           </div>
-        </fieldset>
 
-        <!-- Application -->
-        <fieldset>
-          <legend>Tip cerere</legend>
-          <div class="row">
-            <label>Program
-              <input id="program" value="AS" disabled>
-            </label>
+          <div class="row" style="margin-top:8px;">
             <label>Eligibilitate (motiv)
               <select id="elig">
-                <option value="AS_DEFAULT" selected>AS_DEFAULT</option>
+                <option value="None" selected>Alege...</option>
+                <option value="AS_DEFAULT">AS_DEFAULT</option>
               </select>
             </label>
+            <label class="muted">Program
+              <input value="AS" disabled>
+            </label>
           </div>
-          <div id="valMsg" class="hidden"></div>
+
+          <div id="valMsg" class="hidden" style="margin-top:8px"></div>
         </fieldset>
 
-        <!-- Upload documents (OCR-only; disabled checkboxes) -->
-        <fieldset>
-          <legend>Documente (se bifeaza automat dupa OCR)</legend>
-          <div class="row">
-            <div>
-              <label><input id="doc_cerere" type="checkbox" disabled> Cerere tip ajutor social</label>
-              <label><input id="doc_ci" type="checkbox" disabled> CI solicitant</label>
-              <label><input id="doc_venit" type="checkbox" disabled> Dovezi venit (adeverințe/cupoane)</label>
-              <label><input id="doc_locuire" type="checkbox" disabled> Dovada locuire (contract, adeverința)</label></div>
-            <div>
-              <input id="file" type="file" />
-              <div style="display:flex; gap:8px; margin-top:8px;">
-                <select id="docHint" required>
-                  <option value="" selected disabled>Select tip</option>
-                  <option value="cerere_ajutor">cerere_ajutor</option>
-                  <option value="carte_identitate">carte_identitate</option>
-                  <option value="acte_venit">acte_venit</option>
-                  <option value="acte_locuire">acte_locuire</option>
-                </select>
-                <button id="btnUpload" type="button" disabled>incarca</button>
+        <!-- Step 3/3: Upload + validate -->
+        <div id="gateApp" class="dim">
+          <fieldset>
+            <legend>Step 3/3: Documente (se bifeaza automat dupa OCR)</legend>
+            <div class="row">
+              <div>
+                <label><input id="doc_cerere" type="checkbox" disabled> cerere_ajutor</label>
+                <label><input id="doc_ci" type="checkbox" disabled> carte_identitate</label>
+                <label><input id="doc_venit" type="checkbox" disabled> acte_venit</label>
+                <label><input id="doc_locuire" type="checkbox" disabled> acte_locuire</label>
               </div>
-              <div id="uploads_list" class="muted" style="margin-top:8px"></div>
+              <div>
+                <input id="file" type="file" />
+                <div style="display:flex; gap:8px; margin-top:8px;">
+                  <select id="docHint" required>
+                    <option value="" selected disabled>Select tip</option>
+                    <option value="cerere_ajutor">cerere_ajutor</option>
+                    <option value="carte_identitate">carte_identitate</option>
+                    <option value="acte_venit">acte_venit</option>
+                    <option value="acte_locuire">acte_locuire</option>
+                  </select>
+                  <button id="btnUpload" type="button">Upload</button>
+                </div>
+                <div id="uploads_list" class="muted" style="margin-top:8px"></div>
+              </div>
             </div>
-          </div>
-        </fieldset>
+          </fieldset>
 
-        <div class="row">
-          <button id="btnValidate" type="button">Valideaza</button>
-          <button id="btnCreateCase" type="button">Creeaza dosarul & rezerva</button>
+          <div class="row">
+            <button id="btnValidate" type="button">Valideaza</button>
+            <button id="btnCreateCase" type="button">Creeaza dosarul & rezerva</button>
+          </div>
         </div>
       </div>
     </div>
@@ -122,11 +126,10 @@
   <aside class="chat-col">
     {% set chat_mode = 'user' %}
     {% set chat_context = 'social' %}
-              {% include "_chat_widget.html" with context %}
+    {% include "_chat_widget.html" with context %}
   </aside>
 </div>
 
 <script src="/static/js/user_social.js"></script>
-
 </body>
 </html>

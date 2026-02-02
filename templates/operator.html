@@ -120,6 +120,17 @@
           {% endif %}
         </tbody>
       </table>
+
+      <h3>Audit (ultimele actiuni)</h3>
+      <div class="muted" style="margin:6px 0 10px">Endpoint: <code>/local/audit</code>. Se actualizeaza automat.</div>
+      <table>
+        <thead>
+          <tr><th>Timp</th><th>Actor</th><th>Actiune</th><th>Entitate</th><th>Detalii</th></tr>
+        </thead>
+        <tbody id="auditBody">
+          <tr><td colspan="5" class="muted">Se incarca...</td></tr>
+        </tbody>
+      </table>
     </main>
 
     <aside class="chat-col">
@@ -164,16 +175,16 @@ function renderCases(cases){
 
   tbody.innerHTML = list.map(t => `
     <tr>
-      <td>${c.case_id}</td>
-      <td>${c.type || '-'}</td>
-      <td>${c.status}</td>
+      <td>${t.case_id}</td>
+      <td>${t.type || '-'}</td>
+      <td>${t.status}</td>
       <td class="small">
-        ${(c.person?.nume||'')} ${(c.person?.prenume||'')}<br>
-        ${(c.person?.email||'')}
+        ${(t.person?.nume||'')} ${(t.person?.prenume||'')}<br>
+        ${(t.person?.email||'')}
       </td>
       <td class="stack">
         <form method="post" action="/operator/advance">
-          <input type="hidden" name="case_id" value="${c.case_id}"/>
+          <input type="hidden" name="case_id" value="${t.case_id}"/>
           <select name="next_status">
             <option>SCHEDULED</option>
             <option>IN_PROCESS</option>
@@ -183,13 +194,13 @@ function renderCases(cases){
           <button type="submit">Schimba status</button>
         </form>
         <form method="post" action="/operator/reschedule">
-          <input type="hidden" name="case_id" value="${c.case_id}"/>
+          <input type="hidden" name="case_id" value="${t.case_id}"/>
           <input name="appt_id" placeholder="appt_id (din /api/chat)"/>
-          <select name="slot_id" id="slot-${c.case_id}"></select>
+          <select name="slot_id" id="slot-${t.case_id}"></select>
           <button type="submit">Reschedule CEI</button>
         </form>
         <form method="post" action="/operator/cancel">
-          <input type="hidden" name="case_id" value="${c.case_id}"/>
+          <input type="hidden" name="case_id" value="${t.case_id}"/>
           <input name="appt_id" placeholder="appt_id"/>
           <button type="submit">Cancel appt</button>
         </form>
@@ -245,19 +256,68 @@ function renderTasks(tasks){
 window.addEventListener('chat-steps', (ev) => {
   const { steps } = ev.detail || {};
   if (!Array.isArray(steps)) return;
+  let changed = false;
   for (const step of steps) {
-    if (step.cases)   { renderCases(step.cases); toast(`S-au actualizat ${step.cases.length} dosare`, 'info', 'Dosare'); }
-    if (step.tasks)   { renderTasks(step.tasks); toast(`S-au actualizat ${step.tasks.length} task-uri`, 'info', 'Task-uri'); }
-    if (step.advance) { toast('Status dosar actualizat', 'ok', 'Avansare'); }
-    if (step.reschedule) {
+    if (step.cases)   { renderCases(step.cases); toast(`S-au actualizat ${step.cases.length} dosare`, 'info', 'Dosare'); changed = true; }
+    if (step.tasks)   { renderTasks(step.tasks); toast(`S-au actualizat ${step.tasks.length} task-uri`, 'info', 'Task-uri'); changed = true; }
+    if (step.advance) { toast('Status dosar actualizat', 'ok', 'Avansare'); changed = true; }
+    if (step.reschedule) { changed = true;
       const a = step.reschedule.appointment || {};
       toast(`${a.when || ''} @ ${a.location_id || ''}`, 'ok', 'Reprogramat');
     }
-    if (step.cancel)  { toast('Programare anulata', 'warn', 'Anulare'); }
+    if (step.cancel)  { toast('Programare anulata', 'warn', 'Anulare'); changed = true; }
     if (step.slots)   { window.__lastSlots = step.slots; toast(`Sloturi primite: ${step.slots.length}`, 'info', 'Sloturi'); }
     if (step.toast)   { const t = step.toast; toast(t.msg || '', t.type || 'info', t.title || ''); }
   }
+  if (changed) loadAudit();
 });
+
+
+
+function _shortJson(obj){
+  try{
+    const s = JSON.stringify(obj);
+    return s.length > 240 ? (s.slice(0, 240) + '...') : s;
+  }catch(e){
+    return String(obj || '');
+  }
+}
+
+function renderAudit(rows){
+  const tbody = document.getElementById('auditBody');
+  if(!tbody) return;
+  const list = (Array.isArray(rows) ? rows : []).filter(r => r && r.id != null);
+  if(list.length === 0){
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">No audit entries.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(r => {
+    const ent = [r.entity_type, r.entity_id].filter(Boolean).join(':');
+    return `
+      <tr>
+        <td>${r.created_at || '-'}</td>
+        <td>${r.actor || '-'}</td>
+        <td>${r.action || '-'}</td>
+        <td>${ent || '-'}</td>
+        <td class="muted" style="max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${_shortJson(r.details)}">${_shortJson(r.details)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function loadAudit(){
+  try{
+    const r = await fetch('/local/audit?limit=50');
+    if(!r.ok){
+      logDebug('Error loading audit: ' + r.status);
+      return;
+    }
+    const rows = await r.json();
+    renderAudit(rows);
+  }catch(e){
+    logDebug('Error loading audit: ' + e);
+  }
+}
 
 async function loadSlots(){
   logDebug('Fetching /operator/slots');
@@ -289,6 +349,7 @@ async function loadSlots(){
 }
 
 loadSlots();
+loadAudit();
 
   // React to operator steps (claim/complete/advance) from the chat widget
   window.addEventListener('chat-steps', (ev) => {

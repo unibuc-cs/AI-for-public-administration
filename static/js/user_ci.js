@@ -39,7 +39,8 @@ const el = {
   docTip: $('docTip'),
   type: $('type'), elig: $('elig'),
   doc_cert: $('doc_cert'), doc_ci: $('doc_ci'), doc_addr: $('doc_addr'),
-  file: $('file'), kind_hint: $('kind_hint'),
+  file: $('file'),
+    kind_hint: $('kind_hint'),
   uploads_list: $('uploads_list'),
   btnUpload: $('btnUpload'), btnValidate: $('btnValidate'),
   slotsBox: $('slotsBox'), valMsg: $('valMsg'),
@@ -104,15 +105,28 @@ function applyEligibilityDocRules() {
 
   // VR (viza resedinta) forces eligibility CHANGE_ADDR and locks it
   if (type === 'VR') {
+    const before = el.elig.value;
     el.elig.value = 'CHANGE_ADDR';
     el.elig.disabled = true;
-  } else {
+
+    if (before !== 'CHANGE_ADDR' && window.ChatWidget?.sendSystem) {
+      window.ChatWidget.sendSystem(
+        'Pentru viza flotant, motivul este schimbare adresa. A fost setat automat.'
+      );
+    }
+  }
+  else {
     el.elig.disabled = false;
   }
 
   // If user selected something and the rules were applied, enable the gate
     const eligGateOk = (el.type.value !== "None") &&   (el.elig.value !== 'None');
   if (eligGateOk && hasSlotSelected()) {
+      // This is OPTIONAL - just to triggere another chat widget check
+      if (window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+          window.ChatWidget.sendSystem('__phase2_done__');
+        }
+
     setGate(true, gateApp);
   } else {
     setGate(false, gateApp);
@@ -139,13 +153,13 @@ function requiredDocKinds() {
 /* Upload document with session awareness */
 async function uploadDoc(){
   const f = el.file.files?.[0];
-  const hint = el.kind_hint.value;
+  const kindHint = (el.kind_hint?.value || "auto").trim() || "auto";
   if(!f){ alert('Choose a file first.'); return; }
   if(f.size > (10 * 1024 * 1024)){ alert('File too large (>10 MB).'); return; }
 
   const fd = new FormData();
   fd.append('file', f);
-  fd.append('kind_hint', hint);
+  fd.append('kind_hint', kindHint);
   fd.append('sid', sid);
 
   const resp = await fetch('/upload', { method:'POST', body: fd });
@@ -184,6 +198,7 @@ function makePayload(){
     },
     application:
         {
+            selected_slot_id: selectedSlotId,
             type_elig_confirmed: (el.type.value !== "None" && el.elig.value !== "None" && selectedSlotId),
             type: el.type.value, // CEI / CIS / CIP / VR
             program: 'CI',
@@ -191,6 +206,7 @@ function makePayload(){
             docs }
   };
 }
+
 
 function renderSlotOptions(selectEl, slots, { withLocation = false } = {}) {
   // keep current selection if still present
@@ -207,6 +223,14 @@ function renderSlotOptions(selectEl, slots, { withLocation = false } = {}) {
   }
 
   selectEl.disabled = false;
+
+  // default prompt option
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '— select a slot —';
+  placeholder.disabled = true;
+  placeholder.selected = true;
+  selectEl.appendChild(placeholder);
 
   for (const s of slots) {
     const o = document.createElement('option');
@@ -240,9 +264,9 @@ async function fetchAndRenderSlots(locationId) {
   const slots = await r.json();
   renderSlotOptions(el.slotSelect, slots, { withLocation: false });
   // preselect the first slot for convenience
-    if (!selectedSlotId && el.slotSelect.options.length > 0) {
-      el.slotSelect.value = el.slotSelect.options[0].value;
-    }
+  //   if (!selectedSlotId && el.slotSelect.options.length > 0) {
+  //     el.slotSelect.value = el.slotSelect.options[0].value;
+  //   }
 }
 
 /* Validate form */
@@ -477,8 +501,17 @@ el.locSelect.onchange = async () => {
   await fetchAndRenderSlots(el.locSelect.value);
 };
 
+el.slotSelect.onchange = () => {
+
+  const el = document.getElementById("slotSelectedStatusText");
+  if (!el) return;
+  el.textContent = true
+    ? "Slot selected. You can continue filling the form after clicking the Use this slot button."
+    : "No slot selected yet.";
+}
+
 /* Use slot = unlock form (no reservation yet) */
-btnUseSlot.onclick = () => {
+btnUseSlot.onclick = async () => {
   const id = el.slotSelect.value;
   if (!id) { alert('Choose a slot first'); return; }
   const opt = el.slotSelect.selectedOptions[0];
@@ -494,6 +527,20 @@ btnUseSlot.onclick = () => {
   setGate(false, gateApp);
   slotPicked.textContent = `Selected: ${chosen.when} @ ${chosen.location_id}`;
   try { sessionStorage.setItem('preselected_slot', JSON.stringify(chosen)); } catch(_) {}
+
+  // Send a chat widget signal that phase 1 (slot selection) is done
+  const payload = makePayload();
+  const r = await fetch('/api/select_slot', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const j = await r.json();
+  const is_ok = j?.ok
+
+  if (window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+    window.ChatWidget.sendSystem('__phase1_done__');
+  }
 };
 
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 from typing import Any, Dict
 
+import db
 from .base import Agent, AgentState
 from .settings import LLM_USE
 from .identifiers import allowed_intents
@@ -59,8 +60,11 @@ class EntryAgent(Agent):
 
         # 2) If we are on the PUBLIC chat, prefer navigation for CI / Social
         if ui_context == "public" and intent in {"ci", "social"}:
-            url = f"/user-ci?sid=ci-{sid}" if intent == "ci" else f"/user-social?sid=social-{sid}"
-            label = "Deschide formular CI" if intent == "ci" else "Deschide formular Ajutor Social"
+            # Generate navigation step to the appropriate form page
+            # First sid
+            newsid = db.getRandomSessionId()
+            url = f"/user-ci?sid=ci-{newsid}" if intent == "ci" else f"/user-social?sid=social-{newsid}"
+            label = "Deschide formularul Evidenta Persoane" if intent == "ci" else "Deschide formular Ajutor Social"
             state.setdefault("steps", []).append({"navigate": {"url": url, "label": label}})
             # Keep reply simple; the widget will render as clickable link.
             state["reply"] = f"Te pot ajuta. {label}: {url}"
