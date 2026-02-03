@@ -12,6 +12,35 @@ from .settings import LLM_MODEL
 
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+_ALLOWED_INTENTS = {"ci","social","operator","legal","unknown"}
+_ALLOWED_ACTIONS = {"route","navigate","ask_clarify","hubgov_slots","hubgov_reserve","unknown"}
+
+actions_union = '"|"'.join(sorted(_ALLOWED_ACTIONS))
+intents_union = '"|"'.join(sorted(_ALLOWED_INTENTS))
+
+ROUTER_SYS_PROMPT = f"""You are an intent classifier for a Romanian e-gov assistant.
+Return ONLY JSON with this schema:
+{{
+  "intent": "{intents_union}",
+  "action": "{actions_union}",
+  "confidence": 0.0-1.0,
+  "question": string|null,
+  "args": {{ "cnp": string|null, "app_type": string|null, "location_id": string|null, "slot_id": string|null }},
+  "reason": string
+}}
+
+Rules:
+- The user can write anything. If ambiguous, action="ask_clarify" and set question.
+- Use intent="legal" for legal/procedure questions.
+- Use hubgov_* actions only for electronic ID (cei).
+- Keep question short and concrete.
+- question is required only when action == "ask_clarify".
+- Output must be a single JSON object instance, not the schema. Use actual JSON values: strings in quotes, null as null, numbers as numbers.
+- If you ask a question, ask it in Romanian.
+- No markdown, no code fences.
+- keep reason short <= 20 words
+"""
+
 INTENT_SYS_PROMPT = """You are an intent classifier for a Romanian e-gov assistant.
 
 Return ONLY JSON with this schema:
@@ -75,19 +104,24 @@ Only choose a doc_id from this allowlist:
 If you cannot map confidently, return doc_id=null.
 """
 
-async def _call_json(system_prompt: str, user_message: str) -> Dict[str, Any]:
+
+# Can either pass a list of messages or a single string (user message).
+async def _call_json(system_prompt: str,
+                     messages: List[Dict[str, str]] | str ) -> Dict[str, Any]:
+
     # Uses OpenAI-style JSON mode. Caller must still validate.
     resp = await client.chat.completions.create(
         model=LLM_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
+        messages=[{"role": "system", "content": system_prompt}] + messages if isinstance(messages,    list)
+            else [{"role": "system", "content": system_prompt}, {"role": "user", "content": messages}],
         response_format={"type": "json_object"},
         temperature=0.1,
     )
     raw = resp.choices[0].message.content
     return json.loads(raw)
+
+async def route_with_llm(history_messages: List[Dict[str, str]]) -> Dict[str, Any]:
+    return await _call_json(ROUTER_SYS_PROMPT, history_messages)
 
 async def classify_intent_with_llm(user_message: str) -> Dict[str, Any]:
     return await _call_json(INTENT_SYS_PROMPT, user_message)

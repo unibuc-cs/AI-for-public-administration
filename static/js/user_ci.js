@@ -2,7 +2,8 @@ const qs = new URLSearchParams(location.search);
 const sid = qs.get('sid') || (document.body?.dataset?.defaultSid) || 'anon';
 document.getElementById('sidSpan').textContent = sid;
 let selectedSlotId = null;
-
+let _phase2WasOk = false;
+let _phase1WasOk = false;
 
 // Fix microseconds like 2025-10-19T04:29:49.510815Z (JS Date only supports ms)
 function isoToDate(iso) {
@@ -48,6 +49,7 @@ const el = {
   btnCreateCase: $('btnCreateCase'), result: $('result'),
    row_doc_cert: $('row_doc_cert'),
     row_doc_addr: $('row_doc_addr'),
+  row_doc_ci: $('row_doc_ci')
 };
 
 /* Defaults (used last) */
@@ -97,11 +99,13 @@ function applyEligibilityDocRules() {
   const type = el.type.value;
 
   const needsCert = (elig === 'AGE_14' || elig === 'LOSS');
-  const needsAddr = (elig === 'CHANGE_ADDR');
+  const needsAddr = (elig === 'CHANGE_ADDR' || type === 'VR');
+  const needsOldCI = (elig !== 'AGE_14');  // Only when AGE_14 it doesn't require ci_veche
 
   // Hide/show rows
   if (el.row_doc_cert) el.row_doc_cert.style.display = needsCert ? '' : 'none';
   if (el.row_doc_addr) el.row_doc_addr.style.display = needsAddr ? '' : 'none';
+  if (el.row_doc_ci) el.row_doc_ci.style.display = needsOldCI ? '' : 'none';
 
   // VR (viza resedinta) forces eligibility CHANGE_ADDR and locks it
   if (type === 'VR') {
@@ -121,16 +125,21 @@ function applyEligibilityDocRules() {
 
   // If user selected something and the rules were applied, enable the gate
     const eligGateOk = (el.type.value !== "None") &&   (el.elig.value !== 'None');
-  if (eligGateOk && hasSlotSelected()) {
-      // This is OPTIONAL - just to triggere another chat widget check
-      if (window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
-          window.ChatWidget.sendSystem('__phase2_done__');
-        }
 
+  const phase2Ok = eligGateOk && hasSlotSelected();
+  if (phase2Ok) {
+    // Only notify the chatbot when we Enter Phase 2 (transition false -> true)
+    if (!_phase2WasOk) {
+      if (window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+        window.ChatWidget.sendSystem('__phase2_done__');
+      }
+    }
     setGate(true, gateApp);
   } else {
     setGate(false, gateApp);
   }
+
+  _phase2WasOk = phase2Ok;
 }
 
 /* On eligibility/type change, apply rules */
@@ -145,7 +154,7 @@ function requiredDocKinds() {
 
   if (elig === 'AGE_14' || elig === 'LOSS') req.push('cert_nastere');
   if (elig === 'CHANGE_ADDR') req.push('dovada_adresa');
-  if (type === 'VR') req.push('ci_veche'); // footprint needed
+  if (elig !== 'AGE_14') req.push('ci_veche'); // footprint needed
 
   return req;
 }
@@ -538,8 +547,12 @@ btnUseSlot.onclick = async () => {
   const j = await r.json();
   const is_ok = j?.ok
 
-  if (window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
-    window.ChatWidget.sendSystem('__phase1_done__');
+  // Show phase 1 done only on transition false -> true
+  if (is_ok && !_phase1WasOk) {
+    if (window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+      window.ChatWidget.sendSystem('__phase1_done__');
+    }
+    _phase1WasOk = is_ok;
   }
 };
 
@@ -572,6 +585,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       selectedSlotId = ps.id;
       setGate(true, gateEligType);
       setGate(false, gateApp); // still locked until user selects app type and eligibility
+
+      applyEligibilityDocRules();
     }
     } catch(_) {}
 });

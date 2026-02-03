@@ -272,6 +272,10 @@ class CIAgent(Agent):
             return self._reply(state, "Step 1/3: Select a slot from Slots (top), then click Use this slot.")
 
         if "__phase1_done__" in msg and not self._type_elig_confirmed(app):
+            if app.get("last_wizard_step", None) != "slot_selected":
+                app["last_wizard_step"] = "slot_selected"
+                state["app"] = app
+
             return self._reply(state, "Step 2/3: Slot is set. Now select Motiv (eligibility) and Tip cerere.")
 
         # VR rule (simple enforcement)
@@ -282,11 +286,14 @@ class CIAgent(Agent):
 
         # after phase2 done, give clear instruction
         if "__phase2_done__" in msg:
-            return self._reply(
-                state,
-                "Step 3/3: Optional prefill: upload ci_veche or cert_nastere to prefill fields via OCR. "
-                "If you skip, fill the fields manually. Then upload required docs and click Validate."
-            )
+            if app.get("last_wizard_step", None) != "phase_prefill":
+                app["last_wizard_step"] = "phase_prefill"
+                state["app"] = app
+                return self._reply(
+                    state,
+                    "Step 3/3: Optional prefill: upload ci_veche or cert_nastere to prefill fields via OCR. "
+                    "If you skip, fill the fields manually. Then upload required docs and click Validate."
+                )
 
         # Step 3 gating: keep it light; only nudge if no prefill docs yet
         docs = app.get("docs") or []
@@ -305,7 +312,7 @@ class CIAgent(Agent):
         if not has_prefill:
             return self._reply(
                 state,
-                "Step 3/3: Optional prefill: upload ci_veche or cert_nastere to prefill fields via OCR. "
+                f"Step 3/3: Optional prefill: upload ci_veche or cert_nastere to prefill fields via OCR. "
                 "If you skip, fill the fields manually. Then upload required docs and click Validate."
             )
 

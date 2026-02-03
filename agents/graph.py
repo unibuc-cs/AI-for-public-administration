@@ -12,10 +12,15 @@ from .doc_ocr_agent import DocOCRAgent
 from .scheduling_agent import SchedulingAgent
 from .case_agent import CaseAgent
 from .operator_agent import OperatorAgent
+from .router_agent import RouterAgent
+from .LegalGov import LegalGovAgent
+from .HubGovAgent import HubGovAgent
+
 
 
 # registry of all agents
 AGENTS = {
+    "router": RouterAgent(),
     "entry": EntryAgent(),
     "ci": CIAgent(),
     "social": SocialAgent(),
@@ -24,6 +29,8 @@ AGENTS = {
     "scheduling": SchedulingAgent(),
     "case": CaseAgent(),
     "operator": OperatorAgent(),
+    "legalgov": LegalGovAgent(),
+    "hubgov": HubGovAgent(),
 }
 
 
@@ -35,7 +42,7 @@ async def run_agent_graph(initial_state: AgentState) -> AgentState:
     - stop when there's no next_agent
     """
     state = initial_state
-    current = "entry"
+    current = "router"
 
     while current:
         agent = AGENTS[current]

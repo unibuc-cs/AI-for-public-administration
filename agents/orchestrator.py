@@ -41,6 +41,8 @@ from agents.graph import run_agent_graph
 import httpx
 import re
 from agents.http_client import make_async_client
+from agents.history import  HistoryStore
+
 
 # Import tools (side-effect functions) and RAG helper
 from agents.tools import (
@@ -147,6 +149,8 @@ class ResetIn(BaseModel):
     sid: str
 
 
+CONV_HIST = HistoryStore(max_turns=30)
+
 # --------------------------- CHAT ENDPOINT ---------------------------
 
 # --- tiny helpers for toast steps ---
@@ -179,16 +183,32 @@ async def _recognized_docs_from_ocr(sid: str) -> list[dict]:
 # UI will POST here with user message + optional structured data and the agent graph will run.
 @router.post("/chat")
 async def chat_api(data: ChatIn):
+    sid = data.session_id
+    msg = data.message
+
+    # Add raw user turn (even if marker)
+    CONV_HIST.add_user_turn(sid, msg)
+
     state = {
-        "session_id": data.session_id,
-        "message": data.message,
+        # Data
+        "session_id": sid,
+        "message": msg,
         "person": (data.person.model_dump() if data.person else {}),
         "app": (data.application.model_dump() if data.application else {}),
         "steps": [],
+
+        # Conversation history for LLM agents
+        "history": CONV_HIST.filtered_for_llm(sid),
+        "history_raw": CONV_HIST.raw(sid), # for debugging
     }
+
     result = await run_agent_graph(state)
+    reply = result.get("reply", "OK")
+
+
+
     return {
-        "reply": result.get("reply", "OK"),
+        "reply": reply,
         "steps": result.get("steps", []),
         "halted": True,
     }
