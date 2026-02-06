@@ -5,6 +5,7 @@ import os
 import httpx
 from agents.http_client import make_async_client
 from .base import Agent, AgentState
+from .llm_utils import get_domain_from_ui_context
 
 HUB_URL = os.getenv("HUB_URL", "http://127.0.0.1:8000/hub")
 LOCAL_URL = os.getenv("LOCAL_URL", "http://127.0.0.1:8000/local")
@@ -15,20 +16,30 @@ class SchedulingAgent(Agent):
 
     async def handle(self, state: AgentState) -> AgentState:
         app = state.get("app") or {}
-        steps = state.setdefault("steps", [])
+        ui_context = (app.get("ui_context") or "entry").lower()
 
-        # Show slots
+        steps = state.setdefault("steps", [])
+        steps.append({"type": "open_section", "payload": {"section_id": "slotsBox"}})
+        steps.append({"type": "focus_field", "payload": {"field_id": "loc"}})
+        steps.append({
+            "type": "toast",
+            "payload": {
+                "level": "info",
+                "title": "Programare",
+                "message": "Select location, then slot, then click Use this slot."
+            }
+        })
+
+        # Optional: CEI can hint HubGov refresh (UI may ignore)
         if app.get("type") == "CEI":
-            async with make_async_client() as client:
-                slots = (await client.get(f"{HUB_URL}/slots")).json()
-            steps.append({"slots": slots})
-            state["reply"] = "Here are CEI slots. Say: 'programeaza slot <id>'"
-        elif app.get("program") == "AS":
-            async with make_async_client() as client:
-                slots = (await client.get(f"{LOCAL_URL}/slots-social")).json()
-            steps.append({"slots": slots})
-            state["reply"] = "Here are local slots for Ajutor social. Say: 'programeaza slot <id>'"
-        else:
-            state["reply"] = "No scheduling needed."
-        state["next_agent"] = None
+            steps.append({
+                "type": "hubgov_action",
+                "payload": {
+                    "action": "hubgov_slots",
+                    "args": {"program": app.get("program") or "carte_identitate"}
+                }
+            })
+
+        state["reply"] = "Ok. I guided you to the scheduling step in the form."
+        state["next_agent"] = get_domain_from_ui_context(ui_context)
         return state

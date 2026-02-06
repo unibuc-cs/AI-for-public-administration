@@ -1,7 +1,6 @@
 # Calls existing services to create and manage cases, their state, and scheduling.
 from __future__ import annotations
 import os
-import httpx
 from .base import Agent, AgentState
 from agents.http_client import make_async_client
 
@@ -21,9 +20,18 @@ class CaseAgent(Agent):
             r = await client.post(f"{LOCAL_URL}/cases", json=payload)
             case = r.json()
 
-        state.setdefault("steps", []).append({"case_submit": case})
-        state["reply"] = f"Case {case['case_id']} created."
-        # after case creation you might want scheduling
+        # typed toast instead of legacy steps
+        state.setdefault("steps", []).append({
+            "type": "toast",
+            "payload": {
+                "level": "info",
+                "title": "Case",
+                "message": f"Case {case.get('case_id','?')} created."
+            }
+        })
+        state["reply"] = f"Case {case.get('case_id','?')} created."
+
+        # After case creation you might want scheduling
         if app.get("type") == "CEI" or app.get("program") == "AS":
             state["next_agent"] = "scheduling"
         else:

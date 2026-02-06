@@ -144,7 +144,7 @@ def _missing_person_fields(person: Dict[str, Any]) -> List[str]:
     return missing
 
 class CIAgent(Agent):
-    name = "ci"
+    name = "carte_identitate"
 
     # ---------- tiny helpers (keep simple) ----------
 
@@ -158,7 +158,7 @@ class CIAgent(Agent):
         app = state.get("app") or {}
         if not isinstance(app, dict):
             app = {}
-        app.setdefault("ui_context", "ci")
+        app.setdefault("ui_context", "carte_identitate")
         state["app"] = app
         return app
 
@@ -191,28 +191,6 @@ class CIAgent(Agent):
         return v if isinstance(v, str) and v.strip() else None
 
     # ---------- handlers ----------
-
-    def _handle_pending_autofill(self, state: AgentState, app: dict, msg: str) -> AgentState | None:
-        pending = app.get("pending_autofill_fields")
-        if not (isinstance(pending, dict) and pending):
-            return None
-
-        yes = any(w in msg for w in ["da", "sigur", "ok", "yes", "aplica", "completeaza"])
-        no = any(w in msg for w in ["nu", "no", "lasa", "manual"])
-
-        if yes:
-            state.setdefault("steps", []).append({"autofill": {"fields": pending}})
-            app.pop("pending_autofill_fields", None)
-            state["app"] = app
-            return self._reply(state, "Am completat campurile din formular cu datele detectate. Verifica si corecteaza daca e nevoie.")
-
-        if no:
-            app.pop("pending_autofill_fields", None)
-            state["app"] = app
-            return self._reply(state, "Ok, nu completez automat. Poti continua manual.")
-
-        # user said something else; keep pending but nudge
-        return self._reply(state, "Vrei sa completez automat datele detectate? Raspunde cu da/nu.")
 
     def _maybe_run_doc_intake_on_new_upload(self, state: AgentState, app: dict, sid: str) -> AgentState | None:
         last_id = _get_last_upload_id(sid)
@@ -325,11 +303,6 @@ class CIAgent(Agent):
         msg = self._msg(state)
         sid = self._sid(state)
 
-        # 1) If DocOCR stored pending fields, ask/handle yes-no here (single place)
-        out = self._handle_pending_autofill(state, app, msg)
-        if out:
-            return out
-
         # 2) Detect new uploads and run doc_intake (do not require slot for OCR)
         out = self._maybe_run_doc_intake_on_new_upload(state, app, sid)
         if out:
@@ -343,7 +316,8 @@ class CIAgent(Agent):
         # 4) Missing person fields (after step3)
         missing_fields = _missing_person_fields(person)
         if missing_fields:
-            state.setdefault("steps", []).append({"missing_fields": missing_fields, "focus": missing_fields[0]})
+            state.setdefault("steps", []).append({"type":"toast","payload":{"level":"warn","title":"Date lipsa","message":"Completeaza campurile lipsa."}})
+            state.setdefault("steps", []).append({"type":"focus_field","payload":{"field_id": missing_fields[0]}})
             return self._reply(state, "Please fill required fields.")
 
         # 5) Missing docs
@@ -355,10 +329,10 @@ class CIAgent(Agent):
 
         missing_docs = tool_docs_missing(app.get("type"), app.get("eligibility_reason"), docs)["missing"]
         if missing_docs:
-            state.setdefault("steps", []).append({"missing_docs": missing_docs})
+            state.setdefault("steps", []).append({"type":"highlight_missing_docs","payload":{"kinds": missing_docs}})
+            state.setdefault("steps", []).append({"type":"open_section","payload":{"section_id":"slotsBox"}})
             return self._reply(state,
                                "Missing documents: " + ", ".join(missing_docs) + ". Upload them then click Validate.")
 
         # 6) Ready
         return self._reply(state, "All good. You can click Validate to continue.")
-

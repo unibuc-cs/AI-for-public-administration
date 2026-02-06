@@ -19,7 +19,7 @@ from db import engine, Upload
 from .base import Agent, AgentState
 from .identifiers import allowed_all_doc_ids
 from .settings import LLM_USE
-from .llm_utils import normalize_doc_id_with_llm
+from .llm_utils import normalize_doc_id_with_llm, get_domain_from_ui_context
 
 
 def _upsert_doc(docs: List[Dict[str, Any]], kind: str) -> None:
@@ -58,7 +58,7 @@ class DocIntakeAgent(Agent):
         # Identity card (CI)
         if ("carte" in txt and "identitate" in txt) or ("cnp" in txt and "seria" in txt):
             return "ci_veche"
-        if "ci" in fn or "buletin" in fn:
+        if "carte_identitate" in fn or "buletin" in fn:
             return "ci_veche"
 
         # Birth certificate
@@ -101,6 +101,12 @@ class DocIntakeAgent(Agent):
 
         # Load the uploads for this session from the DB
         items = self._load_uploads(sid)
+        # if no uploads, just return
+        if not items:
+            state["next_agent"] = state.get("return_to", "entry")
+            return state
+
+
         recognized: List[str] = []
 
         # Process each upload and try to recognize its kind
@@ -135,22 +141,30 @@ class DocIntakeAgent(Agent):
         app["docs"] = docs
         state["app"] = app
 
+        # Chain into the OCR agent to extract fields from the recognized documents.
+        state["next_agent"] = "doc_ocr"
+
         # Sets the step for next agents about the upload results
+        msg = ""
+        if recognized_uniq:
+            msg = "Recognized: " + ", ".join(recognized_uniq) + "."
+        else:
+            msg = "Could not recognize document kind. Try a clearer image or rename the file."
         state.setdefault("steps", []).append({
-            "uploads": {
-                "count": len(items),
-                "recognized": recognized_uniq,
+            "type": "toast",
+            "payload": {
+                "level": "info" if recognized_uniq else "warn",
+                "title": "Upload",
+                "message": msg
             }
         })
 
         # user face feedback for recognized docs
-        if recognized_uniq:
-            state["reply"] = "Am recunoscut: " + ", ".join(recognized_uniq) + "."
-        else:
-            state[
-                "reply"] = "Nu am putut recunoaste tipul documentelor incarcate. Poti redenumi fisierul sau incarca o imagine mai clara."
+        state["reply"] = msg
 
-        # Chain to OCR-based field auto-fill, then return to the caller.
-        # Callers should set state['return_to'] before entering this agent.
-        state["next_agent"] = "doc_ocr"
+
+        # Ensure return_to is set to the current UI context if not already present
+        if "return_to" not in state:
+            app = state.get("app") or {}
+            state["return_to"] = get_domain_from_ui_context(app.get("ui_context"))
         return state

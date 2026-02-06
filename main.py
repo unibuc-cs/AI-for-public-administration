@@ -103,19 +103,19 @@ def local_health_hint():
 # ---------------------------- User ---------------------------
 
 # CI case
-@app.get("/user-ci", response_class=HTMLResponse)
+@app.get("/user-carte_identitate", response_class=HTMLResponse)
 async def user_ci_page(request: Request, sid: Optional[str] = None):
     if not sid:
         sid = f"ci-{getRandomSessionId()}"
 
     return templates.TemplateResponse(
         "user_ci.html",
-        {"request": request, "app_title": APP_TITLE, "sid": sid, "ui_context": "ci"}
+        {"request": request, "app_title": APP_TITLE, "sid": sid, "ui_context": "carte_identitate"}
     )
 # Social case
 @app.get("/user-social", response_class=HTMLResponse)
 async def user_social_page(request: Request, sid: Optional[str] = None):
-    if not sid or "public" in sid:
+    if not sid or "entry" in sid:
         sid = f"social-{getRandomSessionId()}"
 
     return templates.TemplateResponse(
@@ -316,7 +316,7 @@ ALLOWED_MIME = {"image/jpeg","image/png","application/pdf"}
 @app.post("/upload")
 async def upload_doc(
     file: UploadFile = File(...),
-    kind_hint: str = Form(default="auto"),
+    docHint: str = Form(default="auto"),
     sid: str = Form(default="anon")  # NEW: session link
 ):
     """
@@ -352,7 +352,7 @@ async def upload_doc(
 
     # Forward to Primarie Locala OCR mock
     files = {"file": (file.filename, content, mime)}
-    data = {"kind_hint": kind_hint, "sid": sid}
+    data = {"docHint": docHint, "sid": sid}
     async with make_async_client() as client:
         r = await client.post(f"{LOCAL_URL}/uploads", files=files, data=data)
         r.raise_for_status()
@@ -367,7 +367,30 @@ async def upload_doc(
             upload_kind = up.get("kind")
             upload_text = up.get("ocr_text")
 
+    if not upload_kind:
+        upload_kind = docHint if docHint != "auto" else None
+
+
+    # Write metadata in DB with a "latest wins" policy per session+kind: if the same kind is uploaded again, remove previous record and files so UI shows only the latest upload for that kind.
     with Session(engine) as s:
+        if sid and upload_kind:
+            old_rows = s.exec(select(Upload).where(Upload.session_id == sid, Upload.kind == upload_kind)).all()
+            for old in old_rows:
+                try:
+                    # Best-effort delete stored files
+                    if old.path:
+                        p = old.path.lstrip("/")
+                        if os.path.exists(p):
+                            os.remove(p)
+                    if old.thumb:
+                        tp = old.thumb.lstrip("/")
+                        if os.path.exists(tp):
+                            os.remove(tp)
+                except Exception:
+                    pass
+                s.delete(old)
+            s.commit()
+
         rec = Upload(
             session_id=sid,
             filename=file.filename,
@@ -432,7 +455,7 @@ def uploads_list_legacy(sid: str):
     # Backwards compatible alias
     return uploads_list(session_id=sid)
 
-@app.get("/confirm-ci", response_class=HTMLResponse)
+@app.get("/confirm-carte_identitate", response_class=HTMLResponse)
 def confirm_ci(request: Request, sid: str, decided: str = "auto"):
     # decided is passed from user_ci redirect; we still show chat so users can schedule CEI if needed
     return templates.TemplateResponse("confirm_ci.html", {

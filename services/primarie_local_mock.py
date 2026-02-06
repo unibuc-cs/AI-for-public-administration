@@ -174,99 +174,65 @@ def local_root():
 @local.post("/uploads")
 async def upload_file(
     file: UploadFile = File(...),
-    kind_hint: str = Form("auto"),
+    docHint: str = Form("auto"),
     sid: str = Form("anon")
 ):
     """
-    Receive a file, store metadata + OCR (simulated), link to session_id.
-    NOTE: The main app is responsible for saving the actual file content; here we store metadata only.
+    Stateless OCR mock:
+    - Does NOT persist uploads.
+    - Returns OCR text + detected kind + recognized kinds.
+    Main app owns DB persistence and override.
     """
+
+    # Read file content and perform OCR
     content = await file.read()
     ocr_text = _ocr_text_from_bytes(content) or file.filename.lower()
 
-    # Prefer hint when not 'auto'
-    kind = None if kind_hint == "auto" else kind_hint
+    # Prefer hint given by user when not 'auto'
+    kind = None if docHint == "auto" else docHint
+
     # Fallback detection via filename keywords (toy OCR)
     if not kind:
         kinds = _doc_kinds_from_text(ocr_text)
         kind = kinds[0] if kinds else None
 
-    # Best-effort persistence
-    with Session(engine) as s:
-        rec = UploadRec(
-            session_id=sid,
-            filename=file.filename,
-            path=f"/tmp/{uuid.uuid4().hex}",  # demo path
-            ocr_text=ocr_text,
-            kind=kind,
-            size=len(content),
-            thumb=None,
-        )
-        s.add(rec)
-        s.commit()
-        s.refresh(rec)
+    recognized = _doc_kinds_from_text(ocr_text)
 
-    _audit(actor="system", action="UPLOAD_CREATE", entity_type="upload", entity_id=str(rec.id), details={
-        "session_id": sid,
-        "filename": file.filename,
-        "kind": kind,
-        "size": len(content),
-    })
+    # Optional audit (no DB id)
+    try:
+        _audit(
+            actor="system",
+            action="UPLOAD_OCR",
+            entity_type="upload",
+            entity_id="mock",
+            details={
+                "session_id": sid,
+                "filename": file.filename,
+                "kind": kind,
+                "size": len(content),
+            },
+        )
+    except Exception:
+        pass
 
     return {
         "ok": True,
         "upload": {
-            "id": rec.id,
-            "session_id": rec.session_id,
-            "filename": rec.filename,
-            "kind": rec.kind,
-            "size": rec.size,
-            "ocr_text": rec.ocr_text,
+            "id": "mock",
+            "session_id": sid,
+            "filename": file.filename,
+            "kind": kind,
+            "size": len(content),
+            "ocr_text": ocr_text,
         },
-        "recognized": _doc_kinds_from_text(ocr_text),
+        "recognized": recognized,
     }
-
-
-@local.get("/uploads")
-def list_uploads(request: Request, session_id: str = Query(..., alias="session_id")):
-    # DEBUG: show who calls this endpoint
-    ua = request.headers.get("user-agent", "-")
-    caller = request.headers.get("X-Caller", "-")
-    if "python-httpx" in ua:
-        print("\n[DEBUG] /local/uploads called by python-httpx. Stack:")
-        print("".join(traceback.format_stack(limit=25)))
-        print(f"[UPLOADS] caller: {caller}")
-
-    with Session(engine) as s:
-        rows = s.exec(select(UploadRec).where(UploadRec.session_id == session_id)).all()
-    recognized = set()
-    items = []
-    for u in rows:
-        items.append({
-            "id": u.id,
-            "filename": u.filename,
-            "kind": u.kind,
-            "size": u.size,
-            "ocr_text": u.ocr_text,
-            "fields": _extract_person_fields_from_text(u.ocr_text or ""),
-        })
-        if u.kind:
-            recognized.add(u.kind)
-        for k in _doc_kinds_from_text(u.ocr_text or ""):
-            recognized.add(k)
-    return {"recognized": sorted(recognized), "items": items}
 
 
 @local.delete("/uploads/purge")
 def purge_uploads(session_id: str = Query(..., alias="session_id")):
-    with Session(engine) as s:
-        rows = s.exec(select(UploadRec).where(UploadRec.session_id == session_id)).all()
-        count = len(rows)
-        for r in rows:
-            s.delete(r)
-        s.commit()
-    return {"ok": True, "deleted": count}
-
+    # Stateless mock: nothing to purge here
+    return {"ok": True, "session_id": session_id}
 
 # --------------------------- social slots (AS) ---------------------------
 def _seed_social_slots():

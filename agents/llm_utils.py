@@ -12,8 +12,18 @@ from .settings import LLM_MODEL
 
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-_ALLOWED_INTENTS = {"ci","social","operator","legal","unknown"}
-_ALLOWED_ACTIONS = {"route","navigate","ask_clarify","hubgov_slots","hubgov_reserve","unknown"}
+_ALLOWED_INTENTS = {"carte_identitate","social","operator","legal","unknown"}
+_ALLOWED_ACTIONS = {"route","navigate","ask_clarify","hubgov_slots","hubgov_reserve","unknown", "scheduling_help"}
+_ALLOWED_INTENTS_WITH_AGENTS = _ALLOWED_INTENTS - {"unknown"}
+
+
+def get_domain_from_ui_context(ui_context: str) -> str:
+    ui_context = (ui_context or "").lower()
+    if ui_context in _ALLOWED_INTENTS_WITH_AGENTS:
+        return ui_context
+
+    return "entry"
+
 
 actions_union = '"|"'.join(sorted(_ALLOWED_ACTIONS))
 intents_union = '"|"'.join(sorted(_ALLOWED_INTENTS))
@@ -33,6 +43,7 @@ Rules:
 - The user can write anything. If ambiguous, action="ask_clarify" and set question.
 - Use intent="legal" for legal/procedure questions.
 - Use hubgov_* actions only for electronic ID (cei).
+- If the user asks about scheduling/slots/programare/rezervare, set action to "scheduling_help".
 - Keep question short and concrete.
 - question is required only when action == "ask_clarify".
 - Output must be a single JSON object instance, not the schema. Use actual JSON values: strings in quotes, null as null, numbers as numbers.
@@ -45,7 +56,7 @@ INTENT_SYS_PROMPT = """You are an intent classifier for a Romanian e-gov assista
 
 Return ONLY JSON with this schema:
 {
-  "intent": "ci" | "social" | "operator" | "unknown",
+  "intent": "carte_identitate" | "social" | "operator" | "unknown",
   "confidence": 0.0-1.0,
   "entities": {
       "cnp": string|null,
@@ -56,7 +67,7 @@ Return ONLY JSON with this schema:
 }
 
 Rules:
-- "ci" for carte de identitate / buletin / CI.
+- "carte_identitate" for carte de identitate / buletin / CI.
 - "social" for ajutor social / beneficii / VMI/ venit minim incluziune.
 - "operator" for backoffice: tasks/cases/admin actions.
 - "unknown" otherwise.

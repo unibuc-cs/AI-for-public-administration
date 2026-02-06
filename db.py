@@ -76,25 +76,30 @@ class Notification(SQLModel, table=True):
 class Upload(SQLModel, table=True):
     """
     Metadata about uploaded files (session-aware) for UI preview and audit.
-    Files are saved by the main app under /static/uploads/*;
-    this record only stores metadata + OCR results.
+    Stores OCR text + extracted entities JSON per document.
     """
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    # Link uploads to a user/session so the UI can reload them later
+    # session linkage
     session_id: str
 
-    # File info
+    # file info
     filename: str
-    path: str                 # absolute or app-relative path to the saved file
-    thumb: Optional[str] = None  # optional thumbnail path (images only)
-    size: Optional[int] = None   # bytes
+    path: str
+    thumb: Optional[str] = None
+    size: Optional[int] = None
 
-    # OCR / classification (from Primarie mock)
+    # doc kind + OCR raw text
     kind: Optional[str] = None
     ocr_text: Optional[str] = None
 
+    # extracted entities
+    extracted_json: Optional[str] = None  # JSON string
+    status: Optional[str] = None          # ok | needs_review | failed
+
+    # timestamps when uploaded/processed
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class Task(SQLModel, table=True):

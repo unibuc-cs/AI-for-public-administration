@@ -128,7 +128,7 @@ Note: ASCII-only (no diacritics).
 
     const fd = new FormData();
     fd.append('file', f);
-    fd.append('kind_hint', elHint.value || 'auto');
+    fd.append('docHint', elHint.value || 'auto');
     fd.append('sid', sid);
 
     elBtn.disabled = true;

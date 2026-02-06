@@ -125,7 +125,7 @@
                           </div>
                           <div style="flex:1">
                             <label>Tip document
-                              <select id="kind_hint" required>
+                              <select id="docHint" required>
                                   <option value="auto">Auto (OCR decides)</option>
                                   <option value="cert_nastere">cert_nastere</option>
                                   <option value="ci_veche">ci_veche</option>
@@ -157,10 +157,11 @@
 
           <aside class="chat-col">
               {% set chat_mode = 'user' %}
-              {% set chat_context = 'ci' %}
+              {% set chat_context = 'carte_identitate' %}
               {% include "_chat_widget.html" with context %}
           </aside>
       </div>
+<script src="/static/js/shared_wizard_steps.js"></script>
 <script src="/static/js/user_ci.js"></script>
 </body>
 </html>

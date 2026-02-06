@@ -41,8 +41,9 @@ const el = {
   type: $('type'), elig: $('elig'),
   doc_cert: $('doc_cert'), doc_ci: $('doc_ci'), doc_addr: $('doc_addr'),
   file: $('file'),
-    kind_hint: $('kind_hint'),
+    docHint: $('docHint'),
   uploads_list: $('uploads_list'),
+  btnUseSlot: $('btnUseSlot'),
   btnUpload: $('btnUpload'), btnValidate: $('btnValidate'),
   slotsBox: $('slotsBox'), valMsg: $('valMsg'),
   locSelect: $('loc'), slotSelect: $('slot'),
@@ -52,9 +53,28 @@ const el = {
   row_doc_ci: $('row_doc_ci')
 };
 
+
+// Install shared wizard step handler (typed + legacy steps)
+if (typeof window.installWizardSteps === 'function') {
+  window.installWizardSteps(
+      cfg = {
+          ids: { slotsBox: 'slotsBox', loc: 'loc', slot: 'slot', docSelect: 'docHint' },
+          applyAutofill: (fields) => {
+            // Map known fields into CI form
+            try {
+              if (fields.cnp && el.cnp) el.cnp.value = fields.cnp;
+              if (fields.nume && el.nume) el.nume.value = fields.nume;
+              if (fields.prenume && el.prenume) el.prenume.value = fields.prenume;
+              if (fields.email && el.email) el.email.value = fields.email;
+              if (fields.telefon && el.telefon) el.telefon.value = fields.telefon;
+              if (fields.adresa && el.adresa) el.adresa.value = fields.adresa;
+            } catch(_) {}
+          }
+      });
+}
 /* Defaults (used last) */
 const defaults = {
-  cnp: "1860903226868",
+  cnp: "1230903226868",
   nume: "Alin",
   prenume: "Stefanescu",
   email: "alin@fmi.unibuc.ro",
@@ -162,13 +182,13 @@ function requiredDocKinds() {
 /* Upload document with session awareness */
 async function uploadDoc(){
   const f = el.file.files?.[0];
-  const kindHint = (el.kind_hint?.value || "auto").trim() || "auto";
+  const kindHint = (el.docHint?.value || "auto").trim() || "auto";
   if(!f){ alert('Choose a file first.'); return; }
   if(f.size > (10 * 1024 * 1024)){ alert('File too large (>10 MB).'); return; }
 
   const fd = new FormData();
   fd.append('file', f);
-  fd.append('kind_hint', kindHint);
+  fd.append('docHint', kindHint);
   fd.append('sid', sid);
 
   const resp = await fetch('/upload', { method:'POST', body: fd });
@@ -191,6 +211,26 @@ async function uploadDoc(){
 
 
 /* Build payload */
+
+// OCR recognized kinds (source of truth)
+const recognizedKinds = new Set();
+
+
+// OCR refresh (shared implementation)
+const refreshDocsFromOCR = (typeof window.createOcrRefresher === 'function')
+  ? window.createOcrRefresher({
+      sid,
+      uploadsUrl: '/uploads',
+      recognizedKinds,
+      uploadsListId: 'uploads_list',
+      checkboxMap: {
+        doc_cert: 'cert_nastere',
+        doc_ci: 'ci_veche',
+        doc_addr: 'dovada_adresa',
+      },
+      toastFn: window.toast
+    })
+  : async () => {};
 function makePayload(){
   const docs = [];
   if (recognizedKinds.has('cert_nastere')) docs.push({kind:'cert_nastere', status:'ok'});
@@ -210,7 +250,7 @@ function makePayload(){
             selected_slot_id: selectedSlotId,
             type_elig_confirmed: (el.type.value !== "None" && el.elig.value !== "None" && selectedSlotId),
             type: el.type.value, // CEI / CIS / CIP / VR
-            program: 'CI',
+            program: 'carte_identitate',
             eligibility_reason: el.elig.value,
             docs }
   };
@@ -260,7 +300,6 @@ function renderSlotOptions(selectEl, slots, { withLocation = false } = {}) {
 const gateApp = document.getElementById('gateApp');
 const gateEligType = document.getElementById('gateEligType');
 const slotPicked = document.getElementById('slotPicked');
-const btnUseSlot = document.getElementById('btnUseSlot');
 
 function setGate(open, gateRef) {
   if (open) gateRef.classList.remove('dim');
@@ -277,6 +316,65 @@ async function fetchAndRenderSlots(locationId) {
   //     el.slotSelect.value = el.slotSelect.options[0].value;
   //   }
 }
+
+// ------------------ Step 1: Use slot (unlock Step 2) ------------------
+if (el.btnUseSlot) {
+  el.btnUseSlot.onclick = async () => {
+    const id = el.slotSelect?.value;
+    if (!id) { alert('Choose a slot first'); return; }
+
+    const opt = el.slotSelect.selectedOptions?.[0];
+
+    selectedSlotId = id;
+
+    const chosen = {
+      id,
+      when: opt ? opt.textContent : '',
+      location_id: el.locSelect?.value || '',
+      sid
+    };
+
+    // Unlock Step 2, keep Step 3 locked until type+elig gate is OK
+    setGate(true, gateEligType);
+    setGate(false, gateApp);
+
+    if (slotPicked) slotPicked.textContent = `Selected: ${chosen.when} @ ${chosen.location_id}`;
+
+    try { sessionStorage.setItem('preselected_slot', JSON.stringify(chosen)); } catch(_) {}
+
+    // Tell backend we selected the slot (CI style)
+    try {
+      const payload = makePayload();
+      const r = await fetch('/api/select_slot', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json();
+      const is_ok = !!j?.ok;
+
+      // Send phase1 marker only once (transition)
+      if (is_ok && !_phase1WasOk) {
+        if (window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+          window.ChatWidget.sendSystem('__phase1_done__');
+        }
+        _phase1WasOk = true;
+      }
+    } catch (e) {
+      // In demo, do not block UI if API fails.
+      if (!_phase1WasOk && window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+        window.ChatWidget.sendSystem('__phase1_done__');
+      }
+      _phase1WasOk = true;
+    }
+
+    // Re-evaluate phase2 gate (type+elig + slot)
+    if (typeof applyEligibilityDocRules === 'function') {
+      applyEligibilityDocRules();
+    }
+  };
+}
+
 
 /* Validate form */
 el.btnValidate.onclick = async () => {
@@ -364,7 +462,6 @@ el.btnValidate.onclick = async () => {
 };
 
 
-
 /* Create case & schedule */
 if (el.btnCreateCase) {
   el.btnCreateCase.onclick = async () => {
@@ -399,165 +496,6 @@ if (el.btnCreateCase) {
 
 el.btnUpload.onclick = uploadDoc;
 
-/* --- Chat ↔ Form bridge: consume chat steps to update UI --- */
-function highlightMissing(missing) {
-  el.valMsg.classList.remove('hidden');
-  if (missing && missing.length) {
-    el.valMsg.className = 'err';
-    el.valMsg.innerHTML = 'Lipsesc documente: ' + missing.join(', ');
-  } else {
-    el.valMsg.className = 'ok';
-    el.valMsg.textContent = 'Toate documentele sunt in regula.';
-  }
-  // DO NOT tick/untick checkboxes here — OCR owns truth.
-}
-
-async function renderSlotsFromStep(slots) {
-  if (!Array.isArray(slots)) return;
-  el.slotsBox.classList.remove('hidden');
-  renderSlotOptions(el.slotSelect, slots, { withLocation:false });
-}
-
-function showSchedulingResult(s) {
-  el.result.textContent = 'Programare: ' + JSON.stringify(s);
-}
-
-window.addEventListener('chat-steps', (ev) => {
-  const { steps } = ev.detail || {};
-  if (!Array.isArray(steps)) return;
-
-  for (const step of steps) {
-    if (step.missing_docs) {
-      const list = step.missing_docs;
-      if (list.length) {
-        toast(`Mai lipsesc: ${list.join(', ')}`, 'warn', 'Documente lipsa');
-      } else {
-        toast('Toate documentele sunt in regula.', 'ok', 'Validare');
-      }
-      // keep your existing UI highlights if you already do them:
-      if (typeof highlightMissing === 'function') highlightMissing(list);
-    }
-
-    if (step.missing_fields) {
-    toast(`Lipsesc campuri: ${step.missing_fields.join(', ')}`, 'warn', 'Date lipsa');
-    }
-
-    if (step.autofill && step.autofill.fields) {
-      const f = step.autofill.fields || {};
-      // Fill only what we have; keep user's manual edits otherwise.
-      if (f.cnp && el.cnp) el.cnp.value = f.cnp;
-      if (f.nume && el.nume) el.nume.value = f.nume;
-      if (f.prenume && el.prenume) el.prenume.value = f.prenume;
-      if (f.adresa && el.adresa) el.adresa.value = f.adresa;
-      toast('Am completat automat campurile din OCR. Verifica si corecteaza daca e nevoie.', 'ok', 'Autofill');
-    }
-    if (step.slots) {
-      toast(`Am gasit ${step.slots.length} sloturi`, 'info', 'Programari');
-      if (typeof renderSlotsFromStep === 'function') renderSlotsFromStep(step.slots);
-    }
-    if (step.scheduling) {
-      const a = step.scheduling.appointment || {};
-      toast(`${a.when || ''} @ ${a.location_id || ''}`, 'ok', 'Programare creata');
-      if (typeof showSchedulingResult === 'function') showSchedulingResult(step.scheduling);
-    }
-    if (step.toast) {
-      // generic toast from backend sugar (explained below)
-      const t = step.toast;
-      toast(t.msg || '', t.type || 'info', t.title || '');
-    }
-  }
-});
-
-// ------------------ OCR / Upload integration ------------------
-/* Keep OCR-recognized kinds ONLY (source of truth) */
-  const recognizedKinds = new Set();
-
-// Also refresh recognized docs after each upload (in case OCR ran server-side)
-async function refreshDocsFromOCR(){
-  const r = await fetch(`/uploads?session_id=${encodeURIComponent(sid)}`);
-  if(!r.ok) return;
-  const j = await r.json();
-
-  // 1) Update OCR truth set
-  recognizedKinds.clear();
-  (j.recognized || []).forEach(k => recognizedKinds.add(k));
-
-  if (recognizedKinds.size) {
-      toast(`OCR found ${recognizedKinds.size} document(s)`, 'info', 'OCR Update');
-  }
-
-  // 2) Check the disabled checkboxes based ONLY on OCR
-  el.doc_cert.checked = recognizedKinds.has('cert_nastere');
-  el.doc_ci.checked   = recognizedKinds.has('ci_veche');
-  el.doc_addr.checked = recognizedKinds.has('dovada_adresa');
-
-  // 3) Render the upload list from server items
-  const items = j.items || [];
-  el.uploads_list.innerHTML = items.length
-    ? items.map(it => {
-        const ocrBadge = it.kind ? `[${it.kind}]` : '';
-        return `<div style="margin:4px 0">${it.filename} ${ocrBadge}</div>`;
-      }).join('')
-    : '<em>No files uploaded yet.</em>';
-}
-
-/* Change location -> reload slots */
-el.locSelect.onchange = async () => {
-  selectedSlotId = null;
-  setGate(false, gateEligType);
-  setGate(false, gateApp);
-  slotPicked.textContent = '';
-  await fetchAndRenderSlots(el.locSelect.value);
-};
-
-el.slotSelect.onchange = () => {
-
-  const el = document.getElementById("slotSelectedStatusText");
-  if (!el) return;
-  el.textContent = true
-    ? "Slot selected. You can continue filling the form after clicking the Use this slot button."
-    : "No slot selected yet.";
-}
-
-/* Use slot = unlock form (no reservation yet) */
-btnUseSlot.onclick = async () => {
-  const id = el.slotSelect.value;
-  if (!id) { alert('Choose a slot first'); return; }
-  const opt = el.slotSelect.selectedOptions[0];
-  // Build a lightweight object for display + later use
-  selectedSlotId = id;
-  const chosen = {
-    id,
-    when: opt ? opt.textContent : '',
-    location_id: el.locSelect.value,
-    sid
-  };
-  setGate(true, gateEligType);
-  setGate(false, gateApp);
-  slotPicked.textContent = `Selected: ${chosen.when} @ ${chosen.location_id}`;
-  try { sessionStorage.setItem('preselected_slot', JSON.stringify(chosen)); } catch(_) {}
-
-  // Send a chat widget signal that phase 1 (slot selection) is done
-  const payload = makePayload();
-  const r = await fetch('/api/select_slot', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload)
-  });
-  const j = await r.json();
-  const is_ok = j?.ok
-
-  // Show phase 1 done only on transition false -> true
-  if (is_ok && !_phase1WasOk) {
-    if (window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
-      window.ChatWidget.sendSystem('__phase1_done__');
-    }
-    _phase1WasOk = is_ok;
-  }
-};
-
-
-/* On load: show slots and keep form LOCKED */
 document.addEventListener('DOMContentLoaded', async () => {
     await refreshDocsFromOCR();
 
@@ -608,7 +546,7 @@ window.getFormPayload = function () {
 
   // Add UI hints the chatbot can use.
   payload.application = payload.application || {};
-  payload.application.ui_context = "ci";
+  payload.application.ui_context = "carte_identitate";
   payload.application.selected_slot_id = selectedSlotId;
   payload.application.location_id = el.locSelect.value;
 

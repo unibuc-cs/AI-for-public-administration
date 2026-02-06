@@ -13,6 +13,8 @@ const sid = qs.get('sid') || (document.body?.dataset?.defaultSid) || 'anon';
 document.getElementById('sidSpan') && (document.getElementById('sidSpan').textContent = sid);
 
 let selectedSlotId = null;
+let _phase1WasOk = false;
+let _phase2WasOk = false;
 
 /* Fix microseconds like 2025-10-19T04:29:49.510815Z (JS Date only supports ms) */
 function isoToDate(iso) {
@@ -35,6 +37,7 @@ const el = {
   slotSelect: $('slot'),
   btnUseSlot: $('btnUseSlot'),
   slotPicked: $('slotPicked'),
+  slotSelectedStatusText: $('slotSelectedStatusText'),
 
   gateEligType: $('gateEligType'),
   gateApp: $('gateApp'),
@@ -59,6 +62,11 @@ const el = {
   btnCreateCase: $('btnCreateCase'),
 };
 
+
+// Install shared wizard step handler (typed + legacy steps)
+if (typeof window.installWizardSteps === 'function') {
+  window.installWizardSteps({ ids: { slotsBox: 'slotsBox', loc: 'loc', slot: 'slot', docSelect: 'docHint' } });
+}
 /* Gates */
 function setGate(open, gateRef) {
   if (!gateRef) return;
@@ -94,6 +102,14 @@ function renderSlotOptions(selectEl, slots) {
 
   selectEl.disabled = false;
 
+  // Placeholder prompt
+  const ph = document.createElement('option');
+  ph.value = '';
+  ph.textContent = '— select a slot —';
+  ph.disabled = true;
+  ph.selected = true;
+  selectEl.appendChild(ph);
+
   for (const s of slots) {
     const o = document.createElement('option');
     o.value = s.id;
@@ -102,10 +118,11 @@ function renderSlotOptions(selectEl, slots) {
     selectEl.appendChild(o);
   }
 
+  // Restore previous selection if still present; otherwise keep placeholder
   if (prev && [...selectEl.options].some(o => o.value === prev)) {
     selectEl.value = prev;
   } else {
-    selectEl.value = selectEl.options[0].value;
+    selectEl.value = '';
   }
 }
 
@@ -121,13 +138,18 @@ function applyEligibilityRules() {
   const phase2Ok = eligOk && hasSlotSelected();
 
   if (phase2Ok) {
-    if (window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
-      window.ChatWidget.sendSystem('__phase2_done__');
+    // Notify only on transition false -> true
+    if (!_phase2WasOk) {
+      if (window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+        window.ChatWidget.sendSystem('__phase2_done__');
+      }
     }
     setGate(true, el.gateApp);
   } else {
     setGate(false, el.gateApp);
   }
+
+  _phase2WasOk = phase2Ok;
 }
 
 /* Sync UI from OCR (server is source of truth) */
@@ -164,7 +186,7 @@ async function uploadDoc() {
 
   const fd = new FormData();
   fd.append('file', f);
-  fd.append('kind_hint', kind);
+  fd.append('docHint', kind);
   fd.append('sid', sid);
 
   // Align with CI: upload endpoint is /upload
@@ -324,20 +346,44 @@ el.locSelect.onchange = async () => {
   setGate(false, el.gateApp);
   if (el.slotPicked) el.slotPicked.textContent = '';
   await fetchAndRenderSlots(el.locSelect.value);
+  if (el.slotSelectedStatusText) el.slotSelectedStatusText.textContent = 'Select a slot from the list.';
 };
 
-el.btnUseSlot.onclick = () => {
+
+el.slotSelect.onchange = () => {
+  // User changed dropdown; do NOT unlock gates until they click "Use this slot".
+  selectedSlotId = null;
+  setGate(false, el.gateEligType);
+  setGate(false, el.gateApp);
+  _phase1WasOk = false; // allow re-enter if they pick and use again
+
+  if (el.slotPicked) el.slotPicked.textContent = '';
+  if (el.slotSelectedStatusText) {
+    const has = !!el.slotSelect.value;
+    el.slotSelectedStatusText.textContent = has
+      ? 'Slot selected. Click "Use this slot" to continue.'
+      : 'No slot selected yet.';
+  }
+};
+
+el.btnUseSlot.onclick = async () => {
   const id = el.slotSelect.value;
   if (!id) { alert('Choose a slot first'); return; }
   const opt = el.slotSelect.selectedOptions[0];
 
-  selectedSlotId = id;
+  // Build a lightweight object for display + restore
   const chosen = {
     id,
     when: opt ? opt.textContent : '',
     location_id: el.locSelect.value,
     sid
   };
+
+  // Persist UI choice for restore
+  try { sessionStorage.setItem('preselected_slot', JSON.stringify(chosen)); } catch (_) {}
+
+  // Mark selection
+  selectedSlotId = id;
 
   // Step 1 -> unlock Step 2
   setGate(true, el.gateEligType);
@@ -353,32 +399,11 @@ el.btnUseSlot.onclick = () => {
 el.btnUpload.onclick = uploadDoc;
 el.elig.addEventListener('change', applyEligibilityRules);
 
-/* React to backend "steps" broadcast by the shared chat widget */
-window.addEventListener('chat-steps', (ev) => {
-  const { steps } = ev.detail || {};
-  if (!Array.isArray(steps)) return;
-
-  for (const step of steps) {
-    if (step.missing_docs) {
-      const list = step.missing_docs || [];
-      if (list.length) toast?.(`Mai lipsesc: ${list.join(', ')}`, 'warn', 'Documente lipsa');
-      else toast?.('Toate documentele sunt in regula.', 'ok', 'Validare');
-    }
-    if (step.missing_fields) {
-      const list = step.missing_fields || [];
-      if (list.length) toast?.(`Lipsesc campuri: ${list.join(', ')}`, 'warn', 'Date lipsa');
-    }
-    if (step.toast) {
-      const t = step.toast || {};
-      toast?.(t.msg || '', t.type || 'info', t.title || '');
-    }
-  }
-});
-
 /* Init */
 document.addEventListener('DOMContentLoaded', async () => {
   await refreshDocsFromOCR();
   await fetchAndRenderSlots(el.locSelect.value);
+  if (el.slotSelectedStatusText) el.slotSelectedStatusText.textContent = 'Select a slot from the list.';
 
   // Locked at start
   setGate(false, el.gateEligType);
@@ -397,11 +422,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (el.locSelect.value !== prevLoc) {
         await fetchAndRenderSlots(el.locSelect.value);
+  if (el.slotSelectedStatusText) el.slotSelectedStatusText.textContent = 'Select a slot from the list.';
       }
 
       el.slotSelect.value = ps.id || el.slotSelect.value;
       if (el.slotPicked) el.slotPicked.textContent = `Selected: ${ps.when || ''} @ ${ps.location_id || ''}`;
       selectedSlotId = ps.id;
+      _phase1WasOk = true;
 
       setGate(true, el.gateEligType);
       applyEligibilityRules();

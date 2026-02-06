@@ -97,14 +97,14 @@ class OperatorAgent(Agent):
         async with make_async_client() as client:
             if action == "list_tasks":
                 tasks = (await client.get(f"{LOCAL_URL}/tasks")).json()
-                state.setdefault("steps", []).append({"tasks": tasks})
+                state.setdefault("steps", []).append({"type":"toast","payload":{"level":"info","title":"Operator","message":f"Found {len(tasks.get('tasks', tasks))} tasks."}})
                 state["reply"] = f"Found {len(tasks.get('tasks', tasks))} tasks."
                 state["next_agent"] = None
                 return state
 
             if action == "list_cases":
                 cases = (await client.get(f"{LOCAL_URL}/cases")).json()
-                state.setdefault("steps", []).append({"cases": cases})
+                state.setdefault("steps", []).append({"type":"toast","payload":{"level":"info","title":"Operator","message":f"Found {len(cases.get('cases', cases))} cases."}})
                 state["reply"] = f"Found {len(cases.get('cases', cases))} cases."
                 state["next_agent"] = None
                 return state
@@ -113,7 +113,7 @@ class OperatorAgent(Agent):
                 r = await client.post(f"{LOCAL_URL}/tasks/{task_id}/claim")
                 r.raise_for_status()
                 payload = r.json()
-                state.setdefault("steps", []).append({"claim": payload})
+                state.setdefault("steps", []).append({"type":"toast","payload":{"level":"info","title":"Operator","message":f"Task {task_id} claimed."}})
                 state["reply"] = f"Task {task_id} claimed."
                 state["next_agent"] = None
                 return state
@@ -122,7 +122,7 @@ class OperatorAgent(Agent):
                 r = await client.post(f"{LOCAL_URL}/tasks/{task_id}/complete", json={"notes": ""})
                 r.raise_for_status()
                 payload = r.json()
-                state.setdefault("steps", []).append({"complete": payload})
+                state.setdefault("steps", []).append({"type":"toast","payload":{"level":"info","title":"Operator","message":f"Task {task_id} completed."}})
                 state["reply"] = f"Task {task_id} completed."
                 state["next_agent"] = None
                 return state
@@ -131,7 +131,7 @@ class OperatorAgent(Agent):
                 r = await client.patch(f"{LOCAL_URL}/cases/{case_id}", params={"status": status})
                 r.raise_for_status()
                 payload = r.json()
-                state.setdefault("steps", []).append({"advance": payload})
+                state.setdefault("steps", []).append({"type":"toast","payload":{"level":"info","title":"Operator","message":f"Case {case_id} updated to {status}."}})
                 state["reply"] = f"Case {case_id} updated to {status}."
                 state["next_agent"] = None
                 return state

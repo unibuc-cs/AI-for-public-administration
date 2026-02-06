@@ -1,6 +1,6 @@
 # TODO: MOVE the operator operations to operator_agent. Similar possibly for others!
 
-""""
+"""
 Note: A2A architecture (graph.py). The "brain" no longer hardcodes all logic in one giant if.
 
 Each agent is a small service that:
@@ -128,7 +128,7 @@ class Application(BaseModel):
     type: Optional[str] = None
     eligibility_reason: Optional[str] = None
     docs: List[Doc] = []
-    ui_context: Optional[str] = Field(default="public")
+    ui_context: Optional[str] = Field(default="entry")
     selected_slot_id: Optional[str] = None
 
 
@@ -153,19 +153,22 @@ CONV_HIST = HistoryStore(max_turns=30)
 
 # --------------------------- CHAT ENDPOINT ---------------------------
 
-# --- tiny helpers for toast steps ---
-def _toast_ok(title: str, msg: str):
-    return {"toast": {"title": title, "msg": msg, "type": "ok"}}
+# --- tiny helpers for typed toast steps ---
+def _toast(level: str, title: str, message: str) -> dict:
+    return {"type":"toast","payload":{"level": level, "title": title, "message": message}}
 
-def _toast_info(title: str, msg: str):
-    return {"toast": {"title": title, "msg": msg, "type": "info"}}
+def _toast_ok(title: str, msg: str) -> dict:
+    return _toast("ok", title, msg)
 
-def _toast_warn(title: str, msg: str):
-    return {"toast": {"title": title, "msg": msg, "type": "warn"}}
+def _toast_info(title: str, msg: str) -> dict:
+    return _toast("info", title, msg)
 
-def _toast_err(title: str, msg: str):
-    return {"toast": {"title": title, "msg": msg, "type": "err"}}
+def _toast_warn(title: str, msg: str) -> dict:
+    return _toast("warn", title, msg)
 
+def _toast_err(title: str, msg: str) -> dict:
+    return _toast("error", title, msg)
+	
 async def _recognized_docs_from_ocr(sid: str) -> list[dict]:
     """Query Primarie /local/uploads and turn recognized kinds into doc list."""
     try:
@@ -187,7 +190,7 @@ async def chat_api(data: ChatIn):
     msg = data.message
 
     # Add raw user turn (even if marker)
-    CONV_HIST.add_user_turn(sid, msg)
+    CONV_HIST.add_user_turn(sid=sid, role="user", text=(msg or ""))
 
     state = {
         # Data

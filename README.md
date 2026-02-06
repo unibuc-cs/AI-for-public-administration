@@ -17,7 +17,7 @@
 ## 1) Entry Agent (Intent Router)
 
 **Input:** user text, session  
-**Output:** { next_agent: "ci" | "social" | "operator" | "intake" | "scheduling" | ... }  
+**Output:** { next_agent: "carte_identitate" | "social" | "operator" | "intake" | "scheduling" | ... }  
 **Function:** Detect intent (via regex or LLM classification) and route.
 
 **Routes to:**
@@ -149,7 +149,7 @@ flowchart LR
     CASE --> LOC
 
     subgraph Data
-        DB_CI["DB_CI"]
+        DB_CI["DB_carte_identitate"]
         DB_SOC["DB_SOCIAL"]
         DB_OP["DB_OPERATOR / tasks"]
     end

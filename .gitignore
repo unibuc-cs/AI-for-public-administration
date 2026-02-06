@@ -25,6 +25,8 @@ env/
 .DS_Store
 Thumbs.db
 
+# Uploads on the server
+static/uploads/
 
 # ---- OneDrive temp files ----
 ~$*

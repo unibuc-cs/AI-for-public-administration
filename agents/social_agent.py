@@ -105,10 +105,8 @@ class SocialAgent(Agent):
         # Step 3/3: person fields + docs
         missing_fields = _missing_person_fields(person)
         if missing_fields:
-            state.setdefault("steps", []).append({
-                "missing_fields": missing_fields,
-                "focus": missing_fields[0],
-            })
+            state.setdefault("steps", []).append({"type":"toast","payload":{"level":"warn","title":"Date lipsa","message":"Completeaza campurile lipsa."}})
+            state.setdefault("steps", []).append({"type":"focus_field","payload":{"field_id": missing_fields[0]}})
             state["reply"] = "Step 3/3: Completeaza datele persoanei, apoi incarca documentele si apasa Valideaza."
             state["next_agent"] = None
             return state
@@ -121,7 +119,8 @@ class SocialAgent(Agent):
         missing_docs = sorted([d for d in required if d not in present])
 
         if missing_docs:
-            state.setdefault("steps", []).append({"missing_docs": missing_docs})
+            state.setdefault("steps", []).append({"type":"highlight_missing_docs","payload":{"kinds": missing_docs}})
+            state.setdefault("steps", []).append({"type":"open_section","payload":{"section_id":"slotsBox"}})
             state["reply"] = "Lipsesc documente: " + ", ".join(missing_docs) + ". Incarca-le in pagina."
             state["next_agent"] = None
             return state

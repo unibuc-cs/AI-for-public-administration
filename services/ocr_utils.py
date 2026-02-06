@@ -252,3 +252,27 @@ def validate_person_simple(person: Dict[str, str]) -> List[str]:
         errs.append("telefon must look like 0XXXXXXXXX")
 
     return errs
+
+def extract_entities(raw: str) -> Dict[str, object]:
+    """
+    Extract structured entities from OCR text.
+
+    Prototype rules:
+    - person fields come from extract_person_fields()
+    - address is kept as raw string (if found)
+    - warnings list is best-effort
+    """
+    person = extract_person_fields(raw or "")
+    warnings: List[str] = []
+
+    if "cnp" not in person:
+        warnings.append("missing_cnp")
+    if "nume" not in person or "prenume" not in person:
+        warnings.append("missing_name")
+
+    return {
+        "person": person,
+        "address": {"raw": person.get("adresa") if isinstance(person, dict) else None},
+        "warnings": warnings,
+        "meta": {"parser": "regex_v1"}
+    }

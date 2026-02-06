@@ -29,7 +29,7 @@ class HistoryStore:
         self._store: Dict[str, List[Turn]] = {}
 
     # Add a new turn to the history for a given session ID.
-    def add(self, sid: str, role: str, text: str) -> None:
+    def add_user_turn(self, sid: str, role: str, text: str) -> None:
         if not sid:
             return
         turns = self._store.setdefault(sid, [])

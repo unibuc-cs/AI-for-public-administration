@@ -160,13 +160,13 @@ async def tool_cancel_appointment(appt_id: str) -> dict:
 
 # --------------------------- FILE UPLOAD + OCR ---------------------------
 
-async def tool_upload(file_bytes: bytes, filename: str, kind_hint: str = "auto", sid: str = "anon") -> dict:
+async def tool_upload(file_bytes: bytes, filename: str, docHint: str = "auto", sid: str = "anon") -> dict:
     """
     Forward a file to the Primarie Locala mock OCR endpoint.
     IMPORTANT: include `sid` so uploads are tied to the chat/form session.
     """
     files = {"file": (filename, file_bytes, "application/octet-stream")}
-    data = {"kind_hint": kind_hint, "sid": sid}
+    data = {"docHint": docHint, "sid": sid}
     async with make_async_client() as client:
         r = await client.post(f"{LOCAL_URL}/uploads", files=files, data=data)
         r.raise_for_status()

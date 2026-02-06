@@ -1,12 +1,12 @@
 (function(){
   const root = document.getElementById('chatwrap');
   const sid = root.getAttribute('data-sid') || 'anon';
-  const ctx = (root.getAttribute('data-ui-context') || 'public').toLowerCase();
+  const ctx = (root.getAttribute('data-ui-context') || 'entry').toLowerCase();
 
   document.getElementById('chatsid').textContent = sid;
 
   const sub = document.getElementById('chatsub');
-  if (ctx === 'ci') sub.textContent = 'Wizard for Identity Card (CI)';
+  if (ctx === 'carte_identitate') sub.textContent = 'Wizard for Identity Card (CI)';
   else if (ctx === 'social') sub.textContent = 'Wizard for Social Help (Ajutor Social)';
   else if (ctx === 'operator') sub.textContent = 'Operator console assistant';
   else sub.textContent = 'Public assistant';
@@ -154,7 +154,7 @@
   });
 
   // Initial greeting
-  if (ctx === 'ci') {
+  if (ctx === 'carte_identitate') {
     addMsg('bot', 'Salut! Te ajut cu cererea pentru CI.');
   } else if (ctx === 'social') {
     addMsg('bot', 'Salut! Te ajut cu cererea pentru Ajutor Social.');

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import List, Set
 
-_ALLOWED_INTENTS: Set[str] = {"ci","social","operator","unknown"}
+_ALLOWED_INTENTS: Set[str] = {"carte_identitate","social","operator","unknown"}
 
 _ALLOWED_OPERATOR_ACTIONS: Set[str] = {
     "list_tasks","list_cases","claim_task","complete_task","advance_case","unknown"

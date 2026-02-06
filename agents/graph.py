@@ -22,7 +22,7 @@ from .HubGovAgent import HubGovAgent
 AGENTS = {
     "router": RouterAgent(),
     "entry": EntryAgent(),
-    "ci": CIAgent(),
+    "carte_identitate": CIAgent(),
     "social": SocialAgent(),
     "doc_intake": DocIntakeAgent(),
     "doc_ocr": DocOCRAgent(),
