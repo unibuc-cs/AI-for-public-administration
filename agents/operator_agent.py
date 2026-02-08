@@ -11,6 +11,8 @@ from typing import Any, Dict, Optional
 
 from .base import Agent, AgentState
 from .settings import LLM_USE
+from .tools import LOCAL_URL  # consistent RUN_MODE defaults
+from services.text_chat_messages import translate_msg
 from .identifiers import allowed_operator_actions, allowed_case_statuses
 from .llm_utils import parse_operator_command_with_llm
 from agents.http_client import make_async_client
@@ -53,7 +55,6 @@ class OperatorAgent(Agent):
 
     async def handle(self, state: AgentState) -> AgentState:
         text = state.get("message", "") or ""
-        from .tools import LOCAL_URL  # consistent RUN_MODE defaults
 
         # 1) LLM parse (optional)
         cmd: Dict[str, Any] = {}
@@ -114,7 +115,7 @@ class OperatorAgent(Agent):
                 r.raise_for_status()
                 payload = r.json()
                 state.setdefault("steps", []).append({"type":"toast","payload":{"level":"info","title":"Operator","message":f"Task {task_id} claimed."}})
-                state["reply"] = f"Task {task_id} claimed."
+                state["reply"] = translate_msg(app, "operator_task_claimed", id=task_id)
                 state["next_agent"] = None
                 return state
 
@@ -123,7 +124,7 @@ class OperatorAgent(Agent):
                 r.raise_for_status()
                 payload = r.json()
                 state.setdefault("steps", []).append({"type":"toast","payload":{"level":"info","title":"Operator","message":f"Task {task_id} completed."}})
-                state["reply"] = f"Task {task_id} completed."
+                state["reply"] = translate_msg(app, "operator_task_completed", id=task_id)
                 state["next_agent"] = None
                 return state
 

@@ -72,17 +72,14 @@ class SocialAgent(Agent):
                     state["app"] = app
                 state["return_to"] = self.name
                 state["next_agent"] = "doc_intake"
-                state["reply"] = "Am detectat documente incarcate. Verific si incerc sa completez automat."
+                state["reply"] = translate_msg(app, "social_detect_uploads")
                 return state
 
         # Wizard Step 1/3: slot required.
         selected_slot_id = app.get("selected_slot_id") if isinstance(app, dict) else None
         if not selected_slot_id:
             if (not msg) or any(k in msg for k in ["program", "programare", "slot", "ajutor", "social", "vreau"]):
-                state["reply"] = (
-                    "Step 1/3: Selecteaza un slot in pagina (Slots) si apasa Use this slot. "
-                    "Dupa asta continui cu eligibilitate si documente."
-                )
+                state["reply"] = translate_msg(app, "social_step1")
                 state["next_agent"] = None
                 return state
 
@@ -98,16 +95,16 @@ class SocialAgent(Agent):
             # If not done, guide.
             elig = (app.get("eligibility_reason") if isinstance(app, dict) else "") or ""
             if not elig or elig == "None":
-                state["reply"] = "Step 2/3: Selecteaza eligibilitate (motiv) si apoi pot valida documentele."
+                state["reply"] = translate_msg(app, "social_step2")
                 state["next_agent"] = None
                 return state
 
         # Step 3/3: person fields + docs
         missing_fields = _missing_person_fields(person)
         if missing_fields:
-            state.setdefault("steps", []).append({"type":"toast","payload":{"level":"warn","title":"Date lipsa","message":"Completeaza campurile lipsa."}})
+            state.setdefault("steps", []).append({"type":"toast","payload":{"level":"warn","title":"Date lipsa","message": translate_msg(app, "social_missing_fields_toast")}})
             state.setdefault("steps", []).append({"type":"focus_field","payload":{"field_id": missing_fields[0]}})
-            state["reply"] = "Step 3/3: Completeaza datele persoanei, apoi incarca documentele si apasa Valideaza."
+            state["reply"] = translate_msg(app, "social_step3")
             state["next_agent"] = None
             return state
 
@@ -121,11 +118,11 @@ class SocialAgent(Agent):
         if missing_docs:
             state.setdefault("steps", []).append({"type":"highlight_missing_docs","payload":{"kinds": missing_docs}})
             state.setdefault("steps", []).append({"type":"open_section","payload":{"section_id":"slotsBox"}})
-            state["reply"] = "Lipsesc documente: " + ", ".join(missing_docs) + ". Incarca-le in pagina."
+            state["reply"] = translate_msg(app, "social_missing_docs", docs=", ".join(missing_docs))
             state["next_agent"] = None
             return state
 
         # Ready -> create case.
-        state["reply"] = "Perfect. Am toate datele si documentele necesare. Creez cererea."
+        state["reply"] = translate_msg(app, "social_ready_create")
         state["next_agent"] = "case"
         return state

@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Set
 
 from sqlmodel import Session, select
+from services.text_chat_messages import translate_msg
 
 from db import engine, Upload
 from .base import Agent, AgentState
@@ -154,7 +155,7 @@ class DocIntakeAgent(Agent):
             "type": "toast",
             "payload": {
                 "level": "info" if recognized_uniq else "warn",
-                "title": "Upload",
+                "title": translate_msg(app, "title_upload"),
                 "message": msg
             }
         })

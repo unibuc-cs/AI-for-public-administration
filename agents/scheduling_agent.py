@@ -6,6 +6,7 @@ import httpx
 from agents.http_client import make_async_client
 from .base import Agent, AgentState
 from .llm_utils import get_domain_from_ui_context
+from services.text_chat_messages import translate_msg
 
 HUB_URL = os.getenv("HUB_URL", "http://127.0.0.1:8000/hub")
 LOCAL_URL = os.getenv("LOCAL_URL", "http://127.0.0.1:8000/local")
@@ -25,8 +26,8 @@ class SchedulingAgent(Agent):
             "type": "toast",
             "payload": {
                 "level": "info",
-                "title": "Programare",
-                "message": "Select location, then slot, then click Use this slot."
+                "title": translate_msg(app, "title_scheduling"),
+                "message": translate_msg(app, "sched_help")
             }
         })
 
@@ -40,6 +41,6 @@ class SchedulingAgent(Agent):
                 }
             })
 
-        state["reply"] = "Ok. I guided you to the scheduling step in the form."
+        state["reply"] = translate_msg(app, "sched_reply")
         state["next_agent"] = get_domain_from_ui_context(ui_context)
         return state

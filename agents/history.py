@@ -4,11 +4,16 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 import time
 
+
+START_MARKER = "__start__"
+
 CONTROL_MARKERS = {
+    START_MARKER,
     "__phase1_done__",
     "__phase2_done__",
     "__upload__",
     "__ping__",
+    "__start__",
 }
 
 # A single turn in the conversation history containing role, text, and timestamp.

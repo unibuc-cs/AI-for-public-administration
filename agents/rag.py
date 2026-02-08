@@ -78,7 +78,7 @@ def _embed(texts: List[str]) -> List[List[float]]:
     if not client:
         # Fallback: naive character-frequency vectorization (ASCII + Romanian diacritics)
         import collections, string
-        alphabet = string.ascii_lowercase # + "aiâsț"
+        alphabet = string.ascii_lowercase # + "aist"
         vecs = []
         for t in texts:
             c = collections.Counter([ch for ch in t.lower() if ch in alphabet])

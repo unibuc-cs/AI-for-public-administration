@@ -117,9 +117,7 @@ function handleStep(cfg, step){
     return;
   }
   if (t === 'autofill_apply') {
-    applyAutofill(cfg, p.fields || {});
-    if (window.toast) window.toast('Autofill applied to the form.', 'info', 'Autofill');
-    return;
+    applyAutofill(cfg, p.fields || {});    return;
   }
 }
 

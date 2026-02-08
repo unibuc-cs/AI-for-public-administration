@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 from db import engine, Upload
 from .base import Agent, AgentState
 from services.ocr_utils import extract_entities
+from services.text_chat_messages import translate_msg
 
 # Helper to format extracted fields for chat preview
 def _format_fields(fields: dict) -> str:
@@ -74,44 +75,25 @@ class DocOCRAgent(Agent):
         app["pending_autofill_offer"] = bool(merged_fields)
         state["app"] = app
 
-        # typed UI step to set fields and focus on the first one
+        # typed UI step toast
         steps = state.setdefault("steps", [])
         steps.append({
-            "type":"toast",
-            "payload" : {
-                "level" : "info",
-                "title" : "OCR",
-                "message" : "OCR entities updated for uploaded documents"
+            "type": "toast",
+            "payload": {
+                "level": "info",
+                "title": translate_msg(app, "title_ocr"),
+                "message": translate_msg(app, "ocr_toast_updated"),
             }
         })
 
-        # Build a reasonable preview for chat and ask user confirmation
+        # Build preview and ask confirmation (offer only; apply happens after user confirms)
         if merged_fields:
             preview = _format_fields(merged_fields)
-            state["reply"] = (
-                "Am extras urmatoarele campuri din documente:\n"
-                f"{preview}\n\n"
-                "Vrei sa le completez automat in formular? Raspunde DA sau NU."
-            )
-
-            # Mark a pending confirmation flag so router can intercept the YES/NO answer
+            state["reply"] = translate_msg(app, "ocr_found_fields", preview=preview)
             app["pending_autofill_offer"] = True
             state["app"] = app
         else:
-            state["reply"] = "OCR processed, but I did not find usable fields. You can try "
+            state["reply"] = translate_msg(app, "ocr_no_fields")
 
-        state["reply"] = "OCR processed. I can suggest autofill values if you want"
         state["next_agent"] = state.pop("return_to", None)
         return state
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,5 +1,5 @@
 # A2A architecture
-# This is the part that actually chains agents together. It’s simple: start at entry, then follow next_agent until there is none.
+# This is the part that actually chains agents together. It's simple: start at entry, then follow next_agent until there is none.
 # This is a classic A2A pattern: each agent knows the next agent; the coordinator just loops.
 from __future__ import annotations
 from typing import Dict, Any

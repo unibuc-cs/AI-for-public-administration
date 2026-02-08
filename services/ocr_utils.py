@@ -104,7 +104,7 @@ def _extract_name_from_ci(lines: List[str]) -> Dict[str, str]:
 
     # Many CI layouts:
     #   "Nume/Nom/Last name" (header) then next line is the actual surname
-    #   "Prenume/Prénom/First name" then next line is the given name
+    #   "Prenume/Prenom/First name" then next line is the given name
     ln_last = _find_value_after_label(lines, last_name_label)
     if ln_last and not re.search(r"\b(nom|last name)\b", ln_last, flags=re.IGNORECASE):
         out["nume"] = ln_last.strip()

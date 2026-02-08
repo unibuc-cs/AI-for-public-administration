@@ -497,6 +497,10 @@ if (el.btnCreateCase) {
 el.btnUpload.onclick = uploadDoc;
 
 document.addEventListener('DOMContentLoaded', async () => {
+  if (window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+    window.ChatWidget.sendSystem('__start__');
+  }
+
     await refreshDocsFromOCR();
 
   if(window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {

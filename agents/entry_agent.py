@@ -9,6 +9,7 @@ from .base import Agent, AgentState
 from .settings import LLM_USE
 from .identifiers import allowed_intents
 from .llm_utils import classify_intent_with_llm
+from services.text_chat_messages import translate_msg
 
 _INTENTS = allowed_intents()
 
@@ -36,7 +37,6 @@ class EntryAgent(Agent):
 
         # If we are already inside a specific wizard, route directly.
         if ui_context in {"carte_identitate", "social", "operator"}:
-            state.setdefault("steps", []).append({"ui_context": ui_context, "route": ui_context})
             state["next_agent"] = ui_context
             return state
 
@@ -65,7 +65,7 @@ class EntryAgent(Agent):
                 "type": "navigate",
                 "payload": {"url": url, "label": label}
             })
-            state["reply"] = f"{label}: {url}"
+            state["reply"] = translate_msg(app, "entry_nav_link", label=label, url=url)
             state["next_agent"] = None
             return state
 
@@ -83,10 +83,6 @@ class EntryAgent(Agent):
             state["next_agent"] = "scheduling"
             return state
 			
-        state["reply"] = (
-            "Pot ajuta cu: carte de identitate (CI), ajutor social (VMI), "
-            "programari si intrebari de operator (task-uri/cazuri). "
-            "Spune-mi ce ai nevoie."
-        )
+        state["reply"] = translate_msg(app, "entry_help")
         state["next_agent"] = None
         return state

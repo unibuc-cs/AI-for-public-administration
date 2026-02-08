@@ -146,3 +146,52 @@ async def parse_operator_command_with_llm(user_message: str, allowed_statuses: L
 async def normalize_doc_id_with_llm(ocr_label: str, allowlist: List[str]) -> Dict[str, Any]:
     prompt = DOC_NORMALIZE_SYS_PROMPT.format(allowlist=", ".join(allowlist))
     return await _call_json(prompt, ocr_label)
+
+
+
+    
+async def detect_language_with_llm(user_text: str) -> str:
+    """Return 'ro'|'en'|'unknown'. Used only when LLM_USE=1."""
+    try:
+        prompt = (
+            "Detect user preferred language from the message. "
+            "Return ONLY JSON with schema: {\"lang\":\"ro\"|\"en\"|\"unknown\"}.\n"
+            f"Message: {user_text!r}"
+        )
+        resp = await client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[{"role": "system", "content": prompt}],
+            temperature=0,
+        )
+        content = (resp.choices[0].message.content or "").strip()
+        data = json.loads(content) if content.startswith("{") else {}
+        lang = (data.get("lang") or "").strip().lower()
+        if lang in ("ro", "en"):
+            return lang
+    except Exception:
+        pass
+    return "unknown"
+
+
+async def detect_yesno_with_llm(user_text: str, topic: str = "confirm") -> str:
+    """Return 'yes'|'no'|'unknown'. Used only when LLM_USE=1."""
+    try:
+        prompt = (
+            "Decide if user response is affirmative or negative.\n"
+            "Return ONLY JSON with schema: {\"decision\":\"yes\"|\"no\"|\"unknown\"}.\n"
+            f"Topic: {topic}\n"
+            f"Message: {user_text!r}"
+        )
+        resp = await client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[{"role": "system", "content": prompt}],
+            temperature=0,
+        )
+        content = (resp.choices[0].message.content or "").strip()
+        data = json.loads(content) if content.startswith("{") else {}
+        d = (data.get("decision") or "").strip().lower()
+        if d in ("yes", "no"):
+            return d
+    except Exception:
+        pass
+    return "unknown"

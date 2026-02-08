@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from .base import Agent, AgentState
 from agents.http_client import make_async_client
+from services.text_chat_messages import translate_msg
 
 LOCAL_URL = os.getenv("LOCAL_URL", "http://127.0.0.1:8000/local")
 
@@ -25,11 +26,11 @@ class CaseAgent(Agent):
             "type": "toast",
             "payload": {
                 "level": "info",
-                "title": "Case",
-                "message": f"Case {case.get('case_id','?')} created."
+                "title": translate_msg(app, "title_case"),
+                "message": translate_msg(app, "case_created", id=case.get("case_id","?"))
             }
         })
-        state["reply"] = f"Case {case.get('case_id','?')} created."
+        state["reply"] = translate_msg(app, "case_created", id=case.get("case_id","?"))
 
         # After case creation you might want scheduling
         if app.get("type") == "CEI" or app.get("program") == "AS":

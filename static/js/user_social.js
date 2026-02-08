@@ -401,6 +401,10 @@ el.elig.addEventListener('change', applyEligibilityRules);
 
 /* Init */
 document.addEventListener('DOMContentLoaded', async () => {
+  if (window.ChatWidget && typeof window.ChatWidget.sendSystem === 'function') {
+    window.ChatWidget.sendSystem('__start__');
+  }
+
   await refreshDocsFromOCR();
   await fetchAndRenderSlots(el.locSelect.value);
   if (el.slotSelectedStatusText) el.slotSelectedStatusText.textContent = 'Select a slot from the list.';
