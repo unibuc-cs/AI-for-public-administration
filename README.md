@@ -1,3 +1,11 @@
+
+# Academic Features
+- RAG over procedural documents (JSON + DOCX) with OpenAI embeddings fallback.
+- Agent to agent orchestration via LangChain graph (entry → CI/social → doc intake → case → scheduling).
+- Mock external services (CEI-HUB, Primarie API) with realistic state management (slots, cases, tasks).
+- Operator dashboard for human-in-the-loop
+
+
 # TODOs
 
 - Always shown Step3/3 or something when selecting the same thing.

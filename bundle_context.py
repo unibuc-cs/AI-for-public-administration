@@ -5,7 +5,7 @@ import zipfile
 IGNORE_LIST = {
     '.git', '.idea', '.venv', '__pycache__', 'node_modules',
     'agents.zip', 'Cod.zip', '.env', 'mcp_demo.db',
-    'AGENT_README.md', 'AGENTS.md', 'bundle_context.py', "debug_http.py", "requirements.txt", "test.py",
+    'AGENT_README.md', 'AGENTS.md', 'bundle_context.py', "requirements.txt", "test.py",
     'Doc' # Excludes the entire Doc folder
 }
 

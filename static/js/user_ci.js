@@ -120,7 +120,7 @@ function applyEligibilityDocRules() {
 
   const needsCert = (elig === 'AGE_14' || elig === 'LOSS');
   const needsAddr = (elig === 'CHANGE_ADDR' || type === 'VR');
-  const needsOldCI = (elig !== 'AGE_14');  // Only when AGE_14 it doesn't require ci_veche
+  const needsOldCI = (elig !== 'AGE_14');  // Only when AGE_14 it doesn't require carte_identitate
 
   // Hide/show rows
   if (el.row_doc_cert) el.row_doc_cert.style.display = needsCert ? '' : 'none';
@@ -174,7 +174,7 @@ function requiredDocKinds() {
 
   if (elig === 'AGE_14' || elig === 'LOSS') req.push('cert_nastere');
   if (elig === 'CHANGE_ADDR') req.push('dovada_adresa');
-  if (elig !== 'AGE_14') req.push('ci_veche'); // footprint needed
+  if (elig !== 'AGE_14') req.push('carte_identitate'); // footprint needed
 
   return req;
 }
@@ -225,7 +225,7 @@ const refreshDocsFromOCR = (typeof window.createOcrRefresher === 'function')
       uploadsListId: 'uploads_list',
       checkboxMap: {
         doc_cert: 'cert_nastere',
-        doc_ci: 'ci_veche',
+        doc_ci: 'carte_identitate',
         doc_addr: 'dovada_adresa',
       },
       toastFn: window.toast
@@ -234,7 +234,7 @@ const refreshDocsFromOCR = (typeof window.createOcrRefresher === 'function')
 function makePayload(){
   const docs = [];
   if (recognizedKinds.has('cert_nastere')) docs.push({kind:'cert_nastere', status:'ok'});
-  if (recognizedKinds.has('ci_veche'))     docs.push({kind:'ci_veche', status:'ok'});
+  if (recognizedKinds.has('carte_identitate'))     docs.push({kind:'carte_identitate', status:'ok'});
   if (recognizedKinds.has('dovada_adresa'))docs.push({kind:'dovada_adresa', status:'ok'});
 
   return {

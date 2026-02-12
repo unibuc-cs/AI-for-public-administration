@@ -58,9 +58,9 @@ class DocIntakeAgent(Agent):
 
         # Identity card (CI)
         if ("carte" in txt and "identitate" in txt) or ("cnp" in txt and "seria" in txt):
-            return "ci_veche"
+            return "carte_identitate"
         if "carte_identitate" in fn or "buletin" in fn:
-            return "ci_veche"
+            return "carte_identitate"
 
         # Birth certificate
         if ("certificat" in txt and "naster" in txt) or ("certificat de nastere" in txt):

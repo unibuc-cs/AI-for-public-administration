@@ -1,0 +1,8 @@
+{
+  "program": "TAXE",
+  "required_docs": [
+    "carte_identitate",
+    "dovada_adresa"
+  ],
+  "notes": "Scaffold demo: local taxes and payments. Extend with real docs later."
+}

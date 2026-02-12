@@ -143,12 +143,15 @@ def _audit(actor: str, action: str, entity_type: str = "", entity_id: str = "", 
 DOC_KEYWORDS = {
     # CI
     "cert_nastere": ["certificat de nastere", "certificat nastere", "birth certificate"],
-    "ci_veche": ["ci veche", "buletin vechi", "old id"],
+    # Use one canonical id for ID docs across flows
+    "carte_identitate": [
+        "carte identitate", "c.i. solicitant", "buletin", "buletin solicitant",
+        "ci veche", "buletin vechi", "old id"
+    ],
     "dovada_adresa": ["dovada adresa", "extras cf", "contract inchiriere", "utility bill"],
     "politie": ["politie", "furt", "declaratie politie", "police"],
     # AS
     "cerere_ajutor": ["cerere ajutor", "cerere tip ajutor social", "formular ajutor social"],
-    "carte_identitate": ["carte identitate", "c.i. solicitant", "buletin solicitant"],
     "acte_venit": ["adeverinta venit", "cupon pensie", "venit", "salariu"],
     "acte_locuire": ["contract inchiriere", "dovada locuire", "adeverinta spatiu"],
     "acte_familie": ["certificat casatorie", "certificate copii", "nastere copil"],

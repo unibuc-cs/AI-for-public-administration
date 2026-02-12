@@ -154,7 +154,7 @@ function install(cfg){
     // Option B (legacy): docCheckboxIds + kindMap (cert/ci/addr)
     const checkboxMap = cfg.checkboxMap || null;
     const docCheckboxIds = cfg.docCheckboxIds || {};
-    const kindMap = cfg.kindMap || { cert: 'cert_nastere', ci: 'ci_veche', addr: 'dovada_adresa' };
+    const kindMap = cfg.kindMap || { cert: 'cert_nastere', ci: 'carte_identitate', addr: 'dovada_adresa' };
 
     const toastFn = cfg.toastFn || null;
 

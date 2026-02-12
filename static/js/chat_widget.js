@@ -8,6 +8,7 @@
   const sub = document.getElementById('chatsub');
   if (ctx === 'carte_identitate') sub.textContent = 'Wizard for Identity Card (CI)';
   else if (ctx === 'social') sub.textContent = 'Wizard for Social Help (Ajutor Social)';
+  else if (ctx === 'taxe') sub.textContent = 'Wizard for Taxes (Taxe si Impozite)';
   else if (ctx === 'operator') sub.textContent = 'Operator console assistant';
   else sub.textContent = 'Public assistant';
 
@@ -41,7 +42,7 @@
     bubble.className = 'bubble ' + (role === 'user' ? 'user' : 'bot');
 
     const t = String(text || '');
-    const m = t.match(/(\/user-ci\?sid=[^\s]+|\/user-social\?sid=[^\s]+)/);
+    const m = t.match(/(\/user-carte_identitate\?sid=[^\s]+|\/user-social\?sid=[^\s]+|\/user-taxe\?sid=[^\s]+)/);
     if (m){
       const url = m[0];
       const parts = t.split(url);
@@ -153,14 +154,25 @@
     }
   });
 
-  // Initial greeting
-  if (ctx === 'carte_identitate') {
-    addMsg('bot', 'Salut! Te ajut cu cererea pentru CI.');
-  } else if (ctx === 'social') {
-    addMsg('bot', 'Salut! Te ajut cu cererea pentru Ajutor Social.');
-  } else if (ctx === 'operator') {
-    addMsg('bot', 'Salut! Spune-mi ce vrei sa faci ca operator.');
-  } else {
-    addMsg('bot', 'Salut! Pot sa te ghidez pentru CI, Ajutor Social sau alte forme. Ori informatii generale.');
-  }
+  window.addEventListener('chat-steps', (ev) => {
+    try {
+      const steps = (ev.detail && ev.detail.steps) || [];
+      for (const st of steps) {
+        if (!st || st.type !== 'navigate') continue;
+        const p = st.payload || {};
+        const url = p.path || p.url;
+        if (url) {
+          window.location.href = url;
+          return;
+        }
+      }
+    } catch (e) {}
+  });
+
+  // Bootstrap:  first message should come from backend (language selection or welcome), so we trigger it by sending an empty message
+  try {
+    setTimeout(() => {
+      sendText('__start__', {silentUser: true});
+    }, 0)
+  } catch(e) {}
 })();

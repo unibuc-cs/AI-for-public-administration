@@ -25,14 +25,39 @@ ACCESS_TOKEN_EXPIRE = 60 * 60 * 8  # 8 hours
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Demo user store (replace with a DB if needed)
+# An operator and a supervisor user are pre-seeded, both with password "demo1234".
 USERS = {
     "operator@example.com": {
         "email": "operator@example.com",
         "name": "Operator Demo",
         "hashed": pwd.hash("demo1234"),
-        "role": "operator"
-    }
+        "role": "operator",
+        "scopes": ["case:read", "case:update", "schedule:write", "uploads:list"],
+    },
+    "supervisor@example.com": {
+        "email": "supervisor@example.com",
+        "name": "Supervisor Demo",
+        "hashed": pwd.hash("demo1234"),
+        "role": "supervisor",
+        "scopes": [
+            "case:read",
+            "case:update",
+            "case:assign",
+            "case:close",
+            "schedule:write",
+            "uploads:list",
+            "uploads:purge",
+            "audit:read",
+        ],
+    },
 }
+
+class UserCtx(BaseModel):
+    email: str
+    name: Optional[str] = None
+    role: str = "operator"
+    scopes: list[str] = []
+
 
 # OAuth2 bearer scheme (not strictly necessary with cookie-based UI,
 # but useful if you later build a programmatic API)
@@ -59,11 +84,20 @@ def authenticate(email: str, password: str):
 
 def create_token(sub: str) -> str:
     """
-    Create a signed JWT for the provided subject (user email).
+    Create a signed JWT for the provided subject.
     The token encodes issued-at and expiry times.
     """
     now = int(time.time())
-    payload = {"sub": sub, "iat": now, "exp": now + ACCESS_TOKEN_EXPIRE}
+    # Check the database for the user to include role/scopes in the token
+    # (optional, but useful if you want to enforce scopes in API routes later)
+    u = USERS.get(sub) or {}
+    payload = {
+        "sub": sub,
+        "role": u.get("role", "operator"),
+        "scopes": u.get("scopes", []),
+        "iat": now,
+        "exp": now + ACCESS_TOKEN_EXPIRE,
+    }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGO)
 
 
@@ -93,6 +127,14 @@ def get_user_from_cookie(request: Request) -> Optional[dict]:
     try:
         payload = jwt.decode(tok, SECRET_KEY, algorithms=[ALGO])
         sub = payload.get("sub")
-        return USERS.get(sub)
+        u = USERS.get(sub)
+
+        res = {
+            "email": u.get("email") or payload.get("email"),
+            "name": u.get("name") or payload.get("name"),
+            "role": u.get("role") or payload.get("role", "operator"),
+            "scopes": u.get("scopes") or payload.get("scopes", []),
+        }
+
     except Exception:
         return None

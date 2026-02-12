@@ -186,6 +186,23 @@ MESSAGES: Dict[str, Dict[str, str]] = {
         "ro": "Agentul legal este placeholder acum. Pune intrebarea ta si voi raspunde cand e integrat.",
         "en": "Legal agent is a placeholder for now. Ask your question and I will answer when integrated.",
     },
+
+    "greet_entry": {
+      "ro": "Salut! Cu ce te pot ajuta? (CI, Ajutor social, Programare, Legal)",
+      "en": "Hi! How can I help? (ID card, Social aid, Scheduling, Legal)",
+    },
+    "greet_ci": {
+      "ro": "Salut! Te ajut cu cererea pentru carte de identitate.",
+      "en": "Hi! I can help with the ID card request.",
+    },
+    "greet_social": {
+      "ro": "Salut! Te ajut cu cererea pentru ajutor social.",
+      "en": "Hi! I can help with the social aid request.",
+    },
+    "greet_operator": {
+      "ro": "Salut! Spune-mi ce vrei sa faci ca operator.",
+      "en": "Hi! Tell me what you want to do as an operator.",
+    },
 }
 
 # Normalize various language inputs to a standard code. Default to DEFAULT_LANG if unrecognized.

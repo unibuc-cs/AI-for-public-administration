@@ -1,0 +1,30 @@
+{
+  "carte_identitate": {
+    "label": "Carte de identitate (CI) / buletin",
+    "hints": ["fata+verso", "scan sau foto clara"]
+  },
+  "cert_nastere": {
+    "label": "Certificat de nastere",
+    "hints": []
+  },
+  "politie": {
+    "label": "Dovada de la politie (declaratie / proces-verbal)",
+    "hints": []
+  },
+  "dovada_adresa": {
+    "label": "Dovada adresei (contract / proprietate / flotant)",
+    "hints": []
+  },
+  "cerere_ajutor": {
+    "label": "Cerere ajutor social (formular)",
+    "hints": []
+  },
+  "acte_venit": {
+    "label": "Acte de venit (adeverinta / talon)",
+    "hints": []
+  },
+  "acte_locuire": {
+    "label": "Acte de locuire (contract / declaratie)",
+    "hints": []
+  }
+}

@@ -13,9 +13,10 @@
 # The orchestrator coordinates these tools in a consistent flow.
 
 import os, json
+from pathlib import Path
 import httpx
 from sympy.multipledispatch.dispatcher import RaiseNotImplementedError
-
+from .identifiers import docs_as_cards
 from agents.http_client import make_async_client
 
 # External service endpoints (mock servers)
@@ -32,29 +33,73 @@ LOCAL_URL = os.getenv("LOCAL_URL", _default_local)
 # --------------------------- ELIGIBILITY & DOCS ---------------------------
 
 
-def tool_docs_required(app_type: str, elig_reason: str) -> dict:
-    required: list[str] = []
-
-    if elig_reason in ("AGE_14", "LOSS"):
-        required.append("cert_nastere")
-
-    if elig_reason == "CHANGE_ADDR":
-        required.append("dovada_adresa")
-
-    if app_type == "VR":
-        required.append("ci_veche")
-
-    return {"required": required}
+_CHECKLIST_DIR = Path(__file__).parent / "checklists"
 
 
+def _load_checklist(name: str) -> dict:
+    p = _CHECKLIST_DIR / f"{name}.json"
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
 
-def tool_docs_missing(app_type: str, eligibility_reason: str, docs: list[dict]) -> dict:
+
+def tool_docs_required(program: str, app_type: str | None = None, elig_reason: str | None = None) -> dict:
+    """Return required document ids.
+
+    Design:
+    - CI uses a structured checklist: common_docs + types + eligibility_docs.
+    - Social/Taxe can use a simple top-level required_docs.
+    """
+    required: set[str] = set()
+    prog = (program or "").strip().lower()
+
+    if prog in {"ci", "carte_identitate"}:
+        cfg = _load_checklist("ci")
+        for d in (cfg.get("common_docs") or []):
+            if isinstance(d, str) and d:
+                required.add(d)
+        t = (app_type or "").strip().upper()
+        if t:
+            spec = (cfg.get("types") or {}).get(t) or {}
+            for d in (spec.get("required_docs") or []):
+                if isinstance(d, str) and d:
+                    required.add(d)
+        r = (elig_reason or "").strip().upper()
+        if r:
+            for d in ((cfg.get("eligibility_docs") or {}).get(r) or []):
+                if isinstance(d, str) and d:
+                    required.add(d)
+        return {"required": sorted(required)}
+
+    # Social aid (ajutor social)
+    if prog in {"as", "social"}:
+        cfg = _load_checklist("social")
+        for d in (cfg.get("required_docs") or []):
+            if isinstance(d, str) and d:
+                required.add(d)
+        return {"required": sorted(required)}
+
+    # Taxes (3rd demo use case)
+    if prog in {"taxe"}:
+        cfg = _load_checklist("taxe")
+        for d in (cfg.get("required_docs") or []):
+            if isinstance(d, str) and d:
+                required.add(d)
+        return {"required": sorted(required)}
+
+    required_list = sorted(required)
+    return {"required": required_list, "required_cards": docs_as_cards(required_list)}
+
+
+def tool_docs_missing(program: str, app_type: str | None, eligibility_reason: str | None, docs: list[dict]) -> dict:
     """
     Compare required documents vs. those provided and return the missing ones.
     """
-    required = set(tool_docs_required(app_type, eligibility_reason)["required"])
+    required = set(tool_docs_required(program, app_type=app_type, elig_reason=eligibility_reason)["required"])
     provided = {d["kind"] for d in docs if d.get("status") == "ok"}
-    return {"missing": list(required - provided)}
+    missing_list = sorted(list(required - provided))
+    return {"missing": missing_list, "missing_cards": docs_as_cards(missing_list)}
 
 
 # --------------------------- CASE SUBMISSION ---------------------------

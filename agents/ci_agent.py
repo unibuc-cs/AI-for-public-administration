@@ -269,7 +269,7 @@ class CIAgent(Agent):
                 state["app"] = app
                 return self._reply(
                     state,
-                    "Step 3/3: Optional prefill: upload ci_veche or cert_nastere to prefill fields via OCR. "
+                    "Step 3/3: Optional prefill: upload carte_identitate or cert_nastere to prefill fields via OCR. "
                     "If you skip, fill the fields manually. Then upload required docs and click Validate."
                 )
 
@@ -278,19 +278,19 @@ class CIAgent(Agent):
         if not isinstance(docs, list):
             docs = []
         kinds = {(d.get("kind") or "") for d in docs if isinstance(d, dict)}
-        has_prefill = ("ci_veche" in kinds) or ("cert_nastere" in kinds)
+        has_prefill = ("carte_identitate" in kinds) or ("cert_nastere" in kinds)
 
         if not has_prefill:
             # DB fallback (simple)
             with Session(engine) as ss:
                 rows = ss.exec(select(Upload.kind).where(Upload.session_id == sid)).all()
             kinds_db = {(k or "").strip() for k in rows}
-            has_prefill = ("ci_veche" in kinds_db) or ("cert_nastere" in kinds_db)
+            has_prefill = ("carte_identitate" in kinds_db) or ("cert_nastere" in kinds_db)
 
         if not has_prefill:
             return self._reply(
                 state,
-                f"Step 3/3: Optional prefill: upload ci_veche or cert_nastere to prefill fields via OCR. "
+                f"Step 3/3: Optional prefill: upload carte_identitate or cert_nastere to prefill fields via OCR. "
                 "If you skip, fill the fields manually. Then upload required docs and click Validate."
             )
 
@@ -327,12 +327,16 @@ class CIAgent(Agent):
         app["docs"] = docs
         state["app"] = app
 
-        missing_docs = tool_docs_missing(app.get("type"), app.get("eligibility_reason"), docs)["missing"]
+        missing_info = tool_docs_missing("ci", app.get("type"), app.get("eligibility_reason"), docs)
+        missing_docs = missing_info.get("missing") or []
+        missing_cards = missing_info.get("missing_cards") or []
+
         if missing_docs:
-            state.setdefault("steps", []).append({"type":"highlight_missing_docs","payload":{"kinds": missing_docs}})
-            state.setdefault("steps", []).append({"type":"open_section","payload":{"section_id":"slotsBox"}})
-            return self._reply(state,
-                               "Missing documents: " + ", ".join(missing_docs) + ". Upload them then click Validate.")
+            state.setdefault("steps", []).append({"type": "highlight_missing_docs", "payload": {"kinds": missing_docs}})
+            state.setdefault("steps", []).append({"type": "open_section", "payload": {"section_id": "slotsBox"}})
+            pretty = ", ".join([c.get("label") or c.get("id") for c in missing_cards]) if missing_cards else ", ".join(
+                missing_docs)
+            return self._reply(state, "Missing documents: " + pretty + ". Upload them then click Validate.")
 
         # 6) Ready
         return self._reply(state, "All good. You can click Validate to continue.")

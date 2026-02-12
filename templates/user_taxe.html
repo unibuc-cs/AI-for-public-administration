@@ -1,0 +1,66 @@
+<!-- templates/user_taxe.html -->
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8"/>
+  <title>Taxe si impozite – Formular (demo)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  {% include "_toast.html" %}
+  <style>
+    :root { --main: 1fr; --rail: minmax(280px, 34%); }
+    html, body { height: 100%; }
+    body{ font-family:system-ui,Arial; margin:0; padding:16px; background:#f8f9fb; color:#222; }
+    .two-col { display:grid; grid-template-columns: var(--main) var(--rail); gap:16px; align-items:start; }
+    @media (max-width: 900px){ .two-col{ grid-template-columns:1fr; } }
+    main .card, fieldset{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:14px; }
+    fieldset{ margin-bottom:16px; }
+    label{ display:block; margin-top:8px }
+    input,select,button,textarea{ padding:8px; border-radius:8px; border:1px solid #ccc; width:100% }
+    .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
+    .muted{ color:#666; font-size:12px }
+    aside.chat-col { position: sticky; top: 16px; height: calc(100vh - 32px); overflow:auto; }
+  </style>
+</head>
+<body data-default-sid="{{ sid }}">
+<div class="two-col">
+  <main>
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px;">
+        <h1>Taxe si impozite – Demo</h1>
+        <div class="muted">sid: <span id="sidSpan"></span></div>
+      </div>
+      <p class="muted">Scaffold use case: completeaza datele + incarca documente, apoi foloseste chat pentru ghidare.</p>
+    </div>
+
+    <fieldset>
+      <legend>Date personale</legend>
+      <div class="row">
+        <div><label>CNP <input id="cnp" placeholder="ex: 186..." /></label></div>
+        <div><label>Telefon <input id="telefon" placeholder="07..." /></label></div>
+      </div>
+      <div class="row">
+        <div><label>Nume <input id="nume" /></label></div>
+        <div><label>Prenume <input id="prenume" /></label></div>
+      </div>
+      <div class="row">
+        <div><label>Email <input id="email" placeholder="name@example.com" /></label></div>
+        <div><label>Adresa (scurt) <input id="adresa" placeholder="Str..., nr..., oras" /></label></div>
+      </div>
+    </fieldset>
+
+    {% set title = 'Incarca documente' %}
+    {% include "_upload_widget.html" %}
+  </main>
+
+  <aside class="chat-col">
+    {% set ui_context = 'taxe' %}
+    {% set title = 'Chat (Taxe)' %}
+    {% set width = '100%' %}
+    {% include "_chat_widget.html" %}
+  </aside>
+</div>
+
+<script src="/static/js/chat_widget.js"></script>
+<script src="/static/js/user_taxe.js"></script>
+</body>
+</html>

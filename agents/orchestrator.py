@@ -35,7 +35,7 @@ State: Keep the case creation separate from scheduling; rescheduling remains via
 
 import os, json
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, Depends
 from pydantic import BaseModel, Field
 from agents.graph import run_agent_graph
 import httpx
@@ -51,7 +51,11 @@ from agents.tools import (
     tool_reschedule, tool_cancel_appointment, tool_upload,
     tool_notify_email, tool_notify_sms, tool_schedule_by_slot
 )
+
+from audit import write_audit
 from agents import rag
+from auth import get_user_from_cookie, UserCtx
+from services.authz import actor_from_userctx, require_perm
 
 router = APIRouter()
 
@@ -83,7 +87,7 @@ def _doc_synonyms() -> Dict[str, str]:
     """Map user text tokens to canonical doc kinds used by tools."""
     return {
         r"\b(certificat(?:ul)? de n(a|a)stere|cert[ ._-]?nastere)\b": "cert_nastere",
-        r"\b(ci(?: veche)?|buletin(?:ul)? vechi)\b": "ci_veche",
+        r"\b(ci(?: veche)?|buletin(?:ul)? vechi|carte\s+de\s+identitate|buletin)\b": "carte_identitate",
         r"\b(dovad(a|a) (?:de )?adres(a|a)|extras(?:ul)? cf|contract(?:ul)?(?: de inchiriere)?)\b": "dovada_adresa",
         r"\b(poli(t|t)ie|furt|pierdere)\b": "politie",
     }
@@ -185,17 +189,27 @@ async def _recognized_docs_from_ocr(sid: str) -> list[dict]:
 # This is the main chat endpoint that drives the agent graph.
 # UI will POST here with user message + optional structured data and the agent graph will run.
 @router.post("/chat")
-async def chat_api(data: ChatIn):
+async def chat_api(data: ChatIn, request: Request):
     sid = data.session_id
     msg = data.message
 
     # Add raw user turn (even if marker)
     CONV_HIST.add_user_turn(sid=sid, role="user", text=(msg or ""))
 
+    user_ctx = None
+    try:
+        u = get_user_from_cookie(request)
+        if u:
+            user_ctx = UserCtx(**u)
+    except Exception:
+        user_ctx = None
+    actor = actor_from_userctx(user_ctx)
+
     state = {
         # Data
         "session_id": sid,
         "message": msg,
+        "actor": actor,
         "person": (data.person.model_dump() if data.person else {}),
         "app": (data.application.model_dump() if data.application else {}),
         "steps": [],
@@ -204,6 +218,23 @@ async def chat_api(data: ChatIn):
         "history": CONV_HIST.filtered_for_llm(sid),
         "history_raw": CONV_HIST.raw(sid), # for debugging
     }
+
+    # Policy-safe audit: store hashes instead of raw PII.
+    try:
+        app = state.get("app") or {}
+        write_audit(
+            actor=actor.get("sub"),
+            action="CHAT_TURN",
+            entity_type="session",
+            entity_id=str(sid or ""),
+            details={
+                "ui_context": (app.get("ui_context") if isinstance(app, dict) else None),
+                "program": (app.get("program") if isinstance(app, dict) else None),
+                "message_len": len(msg or ""),
+            },
+        )
+    except Exception:
+        pass
 
     result = await run_agent_graph(state)
     reply = result.get("reply", "OK")
@@ -242,14 +273,14 @@ class ReschedIn(BaseModel):
 
 
 @router.post("/reschedule")
-async def reschedule_api(data: ReschedIn):
+async def reschedule_api(data: ReschedIn, _user=Depends(require_perm("schedule:write"))):
     """
     Reschedule an appointment at the CEI-HUB (mock).
     """
     return await tool_reschedule(data.appt_id, data.new_slot_id)
 
 @router.post("/session/reset")
-def reset_session(data: ResetIn):
+def reset_session(data: ResetIn, _user=Depends(require_perm("uploads:purge"))):
     """Drop all state for a given session id."""
     sid = data.sid
     removed = {"sessions": bool(SESSIONS.pop(sid, None)), "state": bool(SESS_STATE.pop(sid, None))}
@@ -263,7 +294,7 @@ class CancelIn(BaseModel):
 
 
 @router.post("/cancel")
-async def cancel_api(data: CancelIn):
+async def cancel_api(data: CancelIn, _user=Depends(require_perm("schedule:write"))):
     """
     Cancel an appointment at the CEI-HUB (mock).
     """
@@ -307,7 +338,7 @@ def validate_api(data: ValidateIn):
     eligibility_reason = app["eligibility_reason"]
 
 
-    missing = tool_docs_missing(app["type"], app["eligibility_reason"], app.get("docs", []))["missing"]
+    missing = tool_docs_missing("ci", app.get("type"), app.get("eligibility_reason"), app.get("docs", []))["missing"]
     # Simple person checks (extend as needed)
     errors = []
     pj = data.person.model_dump() if data.person else {}

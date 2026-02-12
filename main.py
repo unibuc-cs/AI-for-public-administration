@@ -11,7 +11,7 @@
 # to be available at HUB_URL and LOCAL_URL. If you prefer to run everything
 # from a single uvicorn process, you can mount those FastAPI apps as sub-apps
 
-import os, io, mimetypes, uuid
+import os, io, mimetypes, uuid, time
 from typing import Optional
 from agents.http_client import make_async_client
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
@@ -36,11 +36,18 @@ RUN_MODE = os.getenv("RUN_MODE", "mounted").lower()  # "mounted" | "split"
 # Import the orchestrator API router (chat + MCP-tool endpoints)
 from agents.orchestrator import router as orch_router
 
+# OpenTelemetry initialization (optional, configured via env vars)
+from observability import init_otel
+
 # Authentication helpers for the operator UI (JWT in a cookie)
 from auth import authenticate, create_token, get_user_from_cookie
 
+# Policy-safe audit log (DB: AuditLog)
+from audit import write_audit
+from fastapi import Depends
 # DB initialization (creates tables on startup)
 from db import init_db, engine, Upload
+from services.authz import require_perm
 
 from sqlmodel import Session, select
 
@@ -57,6 +64,8 @@ LOCAL_URL = os.getenv("LOCAL_URL", _default_local)
 # Create main FastAPI app and include orchestrator API at /api/*
 app = FastAPI(title=APP_TITLE)
 
+init_otel(service_name="public-admin-demo")  # enable with OTEL_ENABLE=1
+
 app.include_router(orch_router, prefix="/api")
 #app.middleware("http")(log_requests)
 
@@ -68,13 +77,38 @@ templates = Jinja2Templates(directory="templates")
 
 @app.middleware("http")
 async def log_upload_poller(request: Request, call_next):
+    t0 = time.time()
     if request.url.path.startswith("/local/uploads"):
         ua = request.headers.get("user-agent", "-")
         ref = request.headers.get("referer", "-")
         origin = request.headers.get("origin", "-")
         caller = request.headers.get("X-Caller", "-")
         print(f"[UPLOADS] {request.method} {request.url} UA={ua} REF={ref} ORIGIN={origin} CALLER={caller}")
-    return await call_next(request)
+    resp = await call_next(request)
+
+    # Policy-safe audit trail: low-cardinality request log.
+    # Avoid logging raw PII or full bodies.
+    try:
+        user = get_user_from_cookie(request)
+        actor = (user.get("username") if isinstance(user, dict) else None) or "anonymous"
+    except Exception:
+        actor = "anonymous"
+
+    try:
+        sid = request.query_params.get("sid") or request.query_params.get("session_id")
+        # For multipart forms, sid is not available here without reading the body.
+        details = {
+            "method": request.method,
+            "path": request.url.path,
+            "status": getattr(resp, "status_code", None),
+            "duration_ms": int((time.time() - t0) * 1000),
+            "sid": sid,
+        }
+        write_audit(actor=actor, action="HTTP", entity_type="http", entity_id=request.url.path, details=details)
+    except Exception:
+        pass
+
+    return resp
 
 @app.on_event("startup")
 def _startup():
@@ -121,6 +155,18 @@ async def user_social_page(request: Request, sid: Optional[str] = None):
     return templates.TemplateResponse(
         "user_social.html",
         {"request": request, "app_title": APP_TITLE, "sid": sid, "ui_context": "social"}
+    )
+
+
+# Taxe case (scaffold demo)
+@app.get("/user-taxe", response_class=HTMLResponse)
+async def user_taxe_page(request: Request, sid: Optional[str] = None):
+    if not sid:
+        sid = f"taxe-{getRandomSessionId()}"
+
+    return templates.TemplateResponse(
+        "user_taxe.html",
+        {"request": request, "app_title": APP_TITLE, "sid": sid, "ui_context": "taxe"}
     )
 
 # --------------------------- AUTH PAGES ---------------------------
@@ -189,7 +235,7 @@ async def operator_ui(request: Request):
       - HITL task queue list
     """
     user = get_user_from_cookie(request)
-    if not user:
+    if not user or (user.get("role") or "").lower() not in {"operator", "supervisor"}:
         return RedirectResponse("/login", status_code=303)
 
     async with make_async_client() as client:
@@ -315,6 +361,7 @@ ALLOWED_MIME = {"image/jpeg","image/png","application/pdf"}
 
 @app.post("/upload")
 async def upload_doc(
+    request: Request,
     file: UploadFile = File(...),
     docHint: str = Form(default="auto"),
     sid: str = Form(default="anon")  # NEW: session link
@@ -402,6 +449,26 @@ async def upload_doc(
         s.add(rec)
         s.commit()
 
+        # Policy-safe audit: do not store raw OCR or file bytes.
+        try:
+            user = get_user_from_cookie(request)
+            actor = (user.get("username") if isinstance(user, dict) else None) or "anonymous"
+            write_audit(
+                actor=actor,
+                action="UPLOAD",
+                entity_type="upload",
+                entity_id=str(rec.id or ""),
+                details={
+                    "sid": sid,
+                    "filename": file.filename,
+                    "mime": mime,
+                    "kind": upload_kind,
+                    "size": len(content),
+                },
+            )
+        except Exception:
+            pass
+
     return JSONResponse(
         {
             "saved": True,
@@ -433,7 +500,7 @@ def uploads_list(session_id: str):
 
 
 @app.delete("/uploads/purge")
-async def uploads_purge(session_id: str):
+async def uploads_purge(session_id: str, _user=Depends(require_perm("uploads:purge"))):
     """Public API: purge uploads for a session (DB + local mock best-effort)."""
     # Best-effort purge on the local mock
     try:

@@ -1,8 +1,22 @@
 {
-  "eligibility_reason": "EXP_60",
-  "required_docs": [
-    "cert_nastere",
-    "ci_veche",
-    "dovada_adresa"
-  ]
+  "program": "CI",
+  "common_docs": [
+    "carte_identitate"
+  ],
+  "eligibility_docs": {
+    "AGE_14": ["cert_nastere"],
+    "LOSS": ["cert_nastere", "politie"],
+    "CHANGE_ADDR": ["dovada_adresa"]
+  },
+  "types": {
+    "CEI": {
+      "required_docs": ["carte_identitate"]
+    },
+    "CIS": {
+      "required_docs": ["carte_identitate"]
+    },
+    "VR": {
+      "required_docs": ["carte_identitate", "dovada_adresa"]
+    }
+  }
 }

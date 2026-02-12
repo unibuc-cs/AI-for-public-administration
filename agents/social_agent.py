@@ -7,8 +7,9 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List
 
+from services.text_chat_messages import translate_msg
 from .base import Agent, AgentState
-
+from .tools import tool_docs_missing
 from db import engine, Upload
 from sqlmodel import Session, select
 
@@ -112,13 +113,18 @@ class SocialAgent(Agent):
         docs = app.get("docs") or []
         if not isinstance(docs, list):
             docs = []
-        present = {d.get("kind") for d in docs if d.get("status") == "ok"}
-        missing_docs = sorted([d for d in required if d not in present])
+        missing_info = tool_docs_missing("as", None, None, docs)
+        missing_docs = missing_info.get("missing") or []
+        missing_cards = missing_info.get("missing_cards") or []
 
         if missing_docs:
             state.setdefault("steps", []).append({"type":"highlight_missing_docs","payload":{"kinds": missing_docs}})
             state.setdefault("steps", []).append({"type":"open_section","payload":{"section_id":"slotsBox"}})
-            state["reply"] = translate_msg(app, "social_missing_docs", docs=", ".join(missing_docs))
+
+            pretty_missing_docs = ", ".join([c.get("label") or c.get("id") for c in missing_cards]) if missing_cards else ", ".join(
+                missing_docs)
+
+            state["reply"] = translate_msg(app, "social_missing_docs", docs=pretty_missing_docs)
             state["next_agent"] = None
             return state
 

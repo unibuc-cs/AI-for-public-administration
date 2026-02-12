@@ -12,7 +12,7 @@ from .settings import LLM_MODEL
 
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-_ALLOWED_INTENTS = {"carte_identitate","social","operator","legal","unknown"}
+_ALLOWED_INTENTS = {"carte_identitate","social","operator","taxe","legal","unknown"}
 _ALLOWED_ACTIONS = {"route","navigate","ask_clarify","hubgov_slots","hubgov_reserve","unknown", "scheduling_help"}
 _ALLOWED_INTENTS_WITH_AGENTS = _ALLOWED_INTENTS - {"unknown"}
 
@@ -131,8 +131,27 @@ async def _call_json(system_prompt: str,
     raw = resp.choices[0].message.content
     return json.loads(raw)
 
-async def route_with_llm(history_messages: List[Dict[str, str]]) -> Dict[str, Any]:
-    return await _call_json(ROUTER_SYS_PROMPT, history_messages)
+def build_router_messages(user_text: str, history: List[Dict[str, str]] | None) -> List[Dict[str, str]]:
+    """Build messages for the router classifier.
+
+    Expected history format:
+      [{"role":"user"|"assistant", "content": "..."}, ...]
+    """
+    msgs: List[Dict[str, str]] = []
+    for m in (history or [])[-12:]:
+        role = (m.get("role") or "").strip().lower()
+        content = (m.get("content") or "").strip()
+        if role in {"user", "assistant"} and content:
+            msgs.append({"role": role, "content": content})
+    if user_text:
+        msgs.append({"role": "user", "content": user_text})
+    return msgs
+
+
+async def route_with_llm(user_text: str, history: List[Dict[str, str]] | None = None) -> Dict[str, Any]:
+    """Route the latest user message using LLM intent+action JSON."""
+    msgs = build_router_messages(user_text, history)
+    return await _call_json(ROUTER_SYS_PROMPT, msgs)
 
 async def classify_intent_with_llm(user_message: str) -> Dict[str, Any]:
     return await _call_json(INTENT_SYS_PROMPT, user_message)

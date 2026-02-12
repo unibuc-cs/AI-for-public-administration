@@ -7,6 +7,7 @@ from .base import AgentState
 from .entry_agent import EntryAgent
 from .ci_agent import CIAgent
 from .social_agent import SocialAgent
+from .taxe_agent import TaxeAgent
 from .doc_intake_agent import DocIntakeAgent
 from .doc_ocr_agent import DocOCRAgent
 from .scheduling_agent import SchedulingAgent
@@ -24,6 +25,7 @@ AGENTS = {
     "entry": EntryAgent(),
     "carte_identitate": CIAgent(),
     "social": SocialAgent(),
+    "taxe": TaxeAgent(),
     "doc_intake": DocIntakeAgent(),
     "doc_ocr": DocOCRAgent(),
     "scheduling": SchedulingAgent(),

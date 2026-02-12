@@ -12,10 +12,10 @@ from .llm_utils import (
     detect_yesno_with_llm,
     get_domain_from_ui_context,
 )
-from .entry_agent import _intent_from_text_fallback
+from .routing_keywords import keyword_intent, looks_like_scheduling
 from .history import CONTROL_MARKERS, START_MARKER
 from services.text_chat_messages import translate_msg
-
+from .case_registry import get_case_config
 
 def _looks_like_lang_choice(text: str) -> str | None:
     s = (text or "").strip().lower()
@@ -36,13 +36,18 @@ def _looks_like_no(text: str) -> bool:
     return bool(re.match(r"^(nu+|no+|n+|cancel+|ignore+)[!?. ]*$", t))
 
 
-def looks_like_scheduling(text: str) -> bool:
-    t = (text or "").lower()
-    keys = [
-        "programare", "slot", "rezerva", "reprogram", "cand e liber",
-        "programari", "programat", "appointment", "schedule",
-    ]
-    return any(k in t for k in keys)
+ 
+
+
+def _greet_key_for_ctx(ui_context: str) -> str:
+    ctx = (ui_context or "entry").lower()
+    if ctx in ("carte_identitate"):
+        return "greet_ci"
+    if ctx in ("social"):
+        return "greet_social"
+    if ctx in ("operator"):
+        return "greet_operator"
+    return "greet_entry"
 
 
 class RouterAgent(Agent):
@@ -59,17 +64,23 @@ class RouterAgent(Agent):
             if choice:
                 app["lang"] = choice
                 state["app"] = app
-                state["reply"] = translate_msg(app, "lang_set_ro" if choice == "ro" else "lang_set_en")
+
+                lang_msg = translate_msg(app, "lang_set_ro" if choice == "ro" else "lang_set_en")
+                greet_msg = translate_msg(app, _greet_key_for_ctx(ui_context))
+                state["reply"] = f"{lang_msg} \n\n {greet_msg}"
                 state["next_agent"] = "entry"
                 return state
 
             # Try to guess language with LLM
-            if LLM_USE and text and (text not in CONTROL_MARKERS) and (text != "__start__"):
+            if LLM_USE and text and (text not in CONTROL_MARKERS) and (text != START_MARKER):
                 guessed = await detect_language_with_llm(text)
                 if guessed in ("ro", "en"):
                     app["lang"] = guessed
                     state["app"] = app
-                    state["reply"] = translate_msg(app, "lang_set_ro" if guessed == "ro" else "lang_set_en")
+
+                    lang_msg = translate_msg(app, "lang_set_ro" if guessed == "ro" else "lang_set_en")
+                    greet_msg = translate_msg(app, _greet_key_for_ctx(ui_context))
+                    state["reply"] = lang_msg + "\n\n" + greet_msg
                     state["next_agent"] = "entry"
                     return state
 
@@ -136,44 +147,48 @@ class RouterAgent(Agent):
         action = None
         if LLM_USE:
             try:
-                out = await route_with_llm(text, state.get("history_llm", []))
+                out = await route_with_llm(text, state.get("history", []))
                 intent = (out.get("intent") or "").strip().lower()
                 action = (out.get("action") or "").strip().lower()
             except Exception:
                 intent = None
                 action = None
 
-        if action == "scheduling_help":
-            state["next_agent"] = "scheduling"
-            return state
+            # Prefer registry mapping whenever we have an intent that corresponds to a use case
+            cfg = get_case_config(intent or "")
+            if cfg:
+                state["program"] = cfg.program
+                state["next_agent"] = cfg.agent_name
+                return state
 
-        if action in ("hubgov_slots", "hubgov_reserve"):
-            # Let HubGov agent handle hub actions (CEI only)
-            state.setdefault("steps", []).append({
-                "type": "hubgov_action",
-                "payload": {"action": action, "args": {"program": app.get("program")}}
-            })
-            state["next_agent"] = "hubgov"
-            return state
+            if action == "scheduling_help":
+                state["next_agent"] = "scheduling"
+                return state
 
-        if intent in ("legal",):
-            state["next_agent"] = "legal_gov"
-            return state
+            if action in ("hubgov_slots", "hubgov_reserve"):
+                state.setdefault("steps", []).append({
+                    "type": "hubgov_action",
+                    "payload": {"action": action, "args": {"program": state.get("program") or app.get("program")}}
+                })
+                state["next_agent"] = "hubgov"
+                return state
 
-        if intent in ("carte_identitate", "social", "operator"):
-            state["next_agent"] = intent
-            return state
+            if intent == "legal":
+                state["next_agent"] = "legalgov"
+                return state
 
-        # fallback intent if no LLM decision
-        fb = _intent_from_text_fallback(text)
-        if fb == "scheduling":
-            state["next_agent"] = "scheduling"
-            return state
-        if fb in ("carte_identitate", "social", "operator"):
-            state["next_agent"] = fb
-            return state
+            # fallback intent if no LLM decision
+            fb = keyword_intent(text)
+            cfg_fb = get_case_config(fb or "")
+            if cfg_fb:
+                state["program"] = cfg_fb.program
+                state["next_agent"] = cfg_fb.agent_name
+                return state
+            if fb == "legal":
+                state["next_agent"] = "legalgov"
+                return state
 
-        # Clarify if we got low confidence or an "ask_clarify" action from LLM
-        state["reply"] = translate_msg(app, "router_ask_need")
-        state["next_agent"] = get_domain_from_ui_context(ui_context)
-        return state
+            # Clarify / continue with current wizard agent
+            state["reply"] = translate_msg(app, "router_ask_need")
+            state["next_agent"] = get_domain_from_ui_context(ui_context)
+            return state
