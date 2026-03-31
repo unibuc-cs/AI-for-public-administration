@@ -16,7 +16,7 @@ from services.text_chat_messages import translate_msg
 from .identifiers import allowed_operator_actions, allowed_case_statuses
 from .llm_utils import parse_operator_command_with_llm
 from agents.http_client import make_async_client
-
+from services.auth import assert_actor_perm
 _ACTIONS = allowed_operator_actions()
 _CASE_STATUSES = allowed_case_statuses()
 
@@ -54,6 +54,8 @@ class OperatorAgent(Agent):
     name = "operator"
 
     async def handle(self, state: AgentState) -> AgentState:
+        actor = state.get("actor") or {"role": "citizen", "scopes": []}
+        app = state.get("app") or {}
         text = state.get("message", "") or ""
 
         # 1) LLM parse (optional)
@@ -97,6 +99,7 @@ class OperatorAgent(Agent):
         # 3) Execute
         async with make_async_client() as client:
             if action == "list_tasks":
+                assert_actor_perm(actor, "case:read")
                 tasks = (await client.get(f"{LOCAL_URL}/tasks")).json()
                 state.setdefault("steps", []).append({"type":"toast","payload":{"level":"info","title":"Operator","message":f"Found {len(tasks.get('tasks', tasks))} tasks."}})
                 state["reply"] = f"Found {len(tasks.get('tasks', tasks))} tasks."
@@ -104,6 +107,7 @@ class OperatorAgent(Agent):
                 return state
 
             if action == "list_cases":
+                assert_actor_perm(actor, "case:read")
                 cases = (await client.get(f"{LOCAL_URL}/cases")).json()
                 state.setdefault("steps", []).append({"type":"toast","payload":{"level":"info","title":"Operator","message":f"Found {len(cases.get('cases', cases))} cases."}})
                 state["reply"] = f"Found {len(cases.get('cases', cases))} cases."
@@ -111,6 +115,7 @@ class OperatorAgent(Agent):
                 return state
 
             if action == "claim_task" and task_id is not None:
+                assert_actor_perm(actor, "case:update")
                 r = await client.post(f"{LOCAL_URL}/tasks/{task_id}/claim")
                 r.raise_for_status()
                 payload = r.json()
@@ -120,6 +125,7 @@ class OperatorAgent(Agent):
                 return state
 
             if action == "complete_task" and task_id is not None:
+                assert_actor_perm(actor, "case:update")
                 r = await client.post(f"{LOCAL_URL}/tasks/{task_id}/complete", json={"notes": ""})
                 r.raise_for_status()
                 payload = r.json()
@@ -129,6 +135,7 @@ class OperatorAgent(Agent):
                 return state
 
             if action == "advance_case" and case_id and status:
+                assert_actor_perm(actor, "case:update")
                 r = await client.patch(f"{LOCAL_URL}/cases/{case_id}", params={"status": status})
                 r.raise_for_status()
                 payload = r.json()

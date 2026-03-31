@@ -11,7 +11,7 @@
 # to be available at HUB_URL and LOCAL_URL. If you prefer to run everything
 # from a single uvicorn process, you can mount those FastAPI apps as sub-apps
 
-import os, io, mimetypes, uuid, time
+import io, mimetypes, uuid, time
 from typing import Optional
 from agents.http_client import make_async_client
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
@@ -19,11 +19,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
-import httpx
-import json
-from debug_http import log_requests
 from db import getRandomSessionId
-
+from services.auth import require_role
 from dotenv import load_dotenv
 import os
 load_dotenv()
@@ -40,14 +37,14 @@ from agents.orchestrator import router as orch_router
 from observability import init_otel
 
 # Authentication helpers for the operator UI (JWT in a cookie)
-from auth import authenticate, create_token, get_user_from_cookie
+from services.auth import authenticate, create_token, get_user_from_cookie
 
 # Policy-safe audit log (DB: AuditLog)
 from audit import write_audit
 from fastapi import Depends
 # DB initialization (creates tables on startup)
 from db import init_db, engine, Upload
-from services.authz import require_perm
+from services.auth import require_perm
 
 from sqlmodel import Session, select
 
@@ -256,28 +253,26 @@ async def operator_ui(request: Request):
 
 
 @app.post("/operator/advance")
-async def operator_advance(request: Request, case_id: str = Form(...), next_status: str = Form(...)):
+async def operator_advance(
+    request: Request,
+    user=Depends(require_role(["operator", "supervisor"])),
+    case_id: str = Form(...),
+    next_status: str = Form(...),
+):
     """
     Update case status via Primarie Locala mock service.
     """
-    user = get_user_from_cookie(request)
-    if not user:
-        return RedirectResponse("/login", status_code=303)
 
     async with make_async_client() as client:
         await client.patch(f"{LOCAL_URL}/cases/{case_id}", params={"status": next_status})
 
     return RedirectResponse(url="/operator", status_code=303)
 
-
 @app.get("/operator/slots")
-async def op_slots(request: Request):
+async def op_slots(request: Request, user=Depends(require_role(["operator","supervisor"]))):
     """
     Helper endpoint for UI: fetch available CEI-HUB slots for a fixed location.
     """
-    user = get_user_from_cookie(request)
-    if not user:
-        return RedirectResponse("/login", status_code=303)
 
     async with make_async_client() as client:
         r = await client.get(f"{HUB_URL}/slots", params={"location_id":"Bucuresti-S1"})
@@ -285,15 +280,18 @@ async def op_slots(request: Request):
 
 
 @app.post("/operator/reschedule")
-async def op_reschedule(request: Request, case_id: str = Form(...), appt_id: str = Form(...), slot_id: str = Form(...)):
+async def op_reschedule(
+    request: Request,
+    user=Depends(require_role(["operator", "supervisor"])),
+    case_id: str = Form(...),
+    appt_id: str = Form(...),
+    slot_id: str = Form(...),
+):
     """
     Reschedule a CEI appointment.
     Calls orchestrator's /api/reschedule endpoint (consolidating business logic there),
     then ensures the case is marked as SCHEDULED.
     """
-    user = get_user_from_cookie(request)
-    if not user:
-        return RedirectResponse("/login", status_code=303)
 
     async with make_async_client() as client:
         base = str(request.base_url).rstrip("/")
@@ -305,13 +303,15 @@ async def op_reschedule(request: Request, case_id: str = Form(...), appt_id: str
 
 
 @app.post("/operator/cancel")
-async def op_cancel(request: Request, case_id: str = Form(...), appt_id: str = Form(...)):
+async def op_cancel(
+    request: Request,
+    user=Depends(require_role(["operator", "supervisor"])),
+    case_id: str = Form(...),
+    appt_id: str = Form(...),
+):
     """
     Cancel a CEI appointment via orchestrator /api/cancel endpoint.
     """
-    user = get_user_from_cookie(request)
-    if not user:
-        return RedirectResponse("/login", status_code=303)
 
     async with make_async_client() as client:
         base = str(request.base_url).rstrip("/")
@@ -324,28 +324,31 @@ async def op_cancel(request: Request, case_id: str = Form(...), appt_id: str = F
 # --------------------------- HITL QUEUE ACTIONS ---------------------------
 
 @app.post("/operator/tasks/claim")
-async def claim_task(request: Request, task_id: int = Form(...)):
+async def claim_task(
+    request: Request,
+    user=Depends(require_role(["operator", "supervisor"])),
+    task_id: int = Form(...),
+):
     """
     Claim a HITL task (assign to current operator).
     """
-    user = get_user_from_cookie(request)
-    if not user:
-        return RedirectResponse("/login", status_code=303)
 
     async with make_async_client() as client:
-        await client.post(f"{LOCAL_URL}/tasks/{task_id}/claim", json={"assignee": user["email"]})
+        await client.post(f"{LOCAL_URL}/tasks/{task_id}/claim", json={"assignee": user.email})
 
     return RedirectResponse("/operator", status_code=303)
 
 
 @app.post("/operator/tasks/done")
-async def done_task(request: Request, task_id: int = Form(...), notes: str = Form("")):
+async def done_task(
+    request: Request,
+    user=Depends(require_role(["operator", "supervisor"])),
+    task_id: int = Form(...),
+    notes: str = Form(""),
+):
     """
     Mark a HITL task as DONE with optional notes.
     """
-    user = get_user_from_cookie(request)
-    if not user:
-        return RedirectResponse("/login", status_code=303)
 
     async with make_async_client() as client:
         await client.post(f"{LOCAL_URL}/tasks/{task_id}/complete", json={"notes": notes})

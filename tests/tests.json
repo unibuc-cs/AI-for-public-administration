@@ -1,0 +1,266 @@
+{
+  "meta": {
+    "suite": "AI Public Admin Prototype",
+    "version": "0.1",
+    "notes": "JSON-driven smoke/regression tests for routing, guarded endpoints, and step-driven interaction outputs."
+  },
+  "tests": [
+    {
+      "id": "T01",
+      "name": "Health check returns ok",
+      "request": {"method": "GET", "path": "/health"},
+      "expect": {"status": 200, "json_contains": {"status": "ok"}}
+    },
+    {
+      "id": "T02",
+      "name": "Public chat endpoint is reachable without auth",
+      "request": {
+        "method": "POST",
+        "path": "/api/chat",
+        "json": {"session_id": "s_t02", "message": "Salut"}
+      },
+      "expect": {"status": 200, "json_has_keys": ["reply", "state", "halted"]}
+    },
+    {
+      "id": "T03",
+      "name": "Router selects CI domain for identity-card keywords",
+      "request": {
+        "method": "POST",
+        "path": "/api/chat",
+        "json": {"session_id": "s_t03", "message": "Vreau buletin / carte de identitate"}
+      },
+      "expect": {
+        "status": 200,
+        "json_path_equals": {"state.current_domain": "ci"}
+      }
+    },
+    {
+      "id": "T04",
+      "name": "Router selects social aid domain for ajutor social keywords",
+      "request": {
+        "method": "POST",
+        "path": "/api/chat",
+        "json": {"session_id": "s_t04", "message": "Am nevoie de ajutor social"}
+      },
+      "expect": {"status": 200, "json_path_equals": {"state.current_domain": "social"}}
+    },
+    {
+      "id": "T05",
+      "name": "Router selects tax domain for tax keywords",
+      "request": {
+        "method": "POST",
+        "path": "/api/chat",
+        "json": {"session_id": "s_t05", "message": "Vreau sa platesc impozitul local"}
+      },
+      "expect": {"status": 200, "json_path_equals": {"state.current_domain": "tax"}}
+    },
+    {
+      "id": "T06",
+      "name": "Router selects operator view for operator keywords",
+      "request": {
+        "method": "POST",
+        "path": "/api/chat",
+        "json": {"session_id": "s_t06", "message": "Sunt operator si vreau sa verific dosare"}
+      },
+      "expect": {"status": 200, "json_path_equals": {"state.current_domain": "operator"}}
+    },
+    {
+      "id": "T07",
+      "name": "CI agent: progress to document upload step",
+      "request": {
+        "method": "POST",
+        "path": "/api/chat",
+        "json": {"session_id": "s_t07", "message": "buletin"}
+      },
+      "expect": {
+        "status": 200,
+        "json_path_contains": {"reply": "document"}
+      }
+    },
+    {
+      "id": "T08",
+      "name": "Legal agent is reachable via legal questions",
+      "request": {
+        "method": "POST",
+        "path": "/api/chat",
+        "json": {"session_id": "s_t08", "message": "Care este baza legala pentru buletin?"}
+      },
+      "expect": {"status": 200, "json_path_contains": {"state.last_agent": "legal"}}
+    },
+    {
+      "id": "T09",
+      "name": "Unknown intent falls back to router clarification",
+      "request": {
+        "method": "POST",
+        "path": "/api/chat",
+        "json": {"session_id": "s_t09", "message": "Am o intrebare generica"}
+      },
+      "expect": {"status": 200, "json_path_contains": {"reply": "alege"}}
+    },
+    {
+      "id": "T10",
+      "name": "Login sets access_token cookie",
+      "request": {
+        "method": "POST",
+        "path": "/login",
+        "json": {"username": "operator@primarie.ro", "password": "operator"}
+      },
+      "expect": {"status": 200, "set_cookie_contains": "access_token="}
+    },
+    {
+      "id": "T11",
+      "name": "Protected operator tasks endpoint rejects anonymous",
+      "request": {"method": "GET", "path": "/operator/tasks"},
+      "expect": {"status": 401}
+    },
+    {
+      "id": "T12",
+      "name": "Operator can access tasks after login",
+      "request": {
+        "method": "GET",
+        "path": "/operator/tasks",
+        "auth": {"username": "operator@primarie.ro", "password": "operator"}
+      },
+      "expect": {"status": 200, "json_type": "list"}
+    },
+    {
+      "id": "T13",
+      "name": "Operator can create a task via enqueue tool endpoint (smoke)",
+      "request": {
+        "method": "POST",
+        "path": "/operator/tasks/enqueue",
+        "auth": {"username": "operator@primarie.ro", "password": "operator"},
+        "json": {"case_id": "case_demo_1", "kind": "review", "payload": {"note": "check"}}
+      },
+      "expect": {"status": 200, "json_has_keys": ["task_id", "status"]}
+    },
+    {
+      "id": "T14",
+      "name": "Operator can claim a task",
+      "request": {
+        "method": "POST",
+        "path": "/operator/tasks/claim",
+        "auth": {"username": "operator@primarie.ro", "password": "operator"},
+        "json": {"task_id": "@prev.task_id"}
+      },
+      "expect": {"status": 200, "json_path_equals": {"status": "claimed"}}
+    },
+    {
+      "id": "T15",
+      "name": "Operator can complete a task",
+      "request": {
+        "method": "POST",
+        "path": "/operator/tasks/complete",
+        "auth": {"username": "operator@primarie.ro", "password": "operator"},
+        "json": {"task_id": "@prev.task_id", "result": {"decision": "ok"}}
+      },
+      "expect": {"status": 200, "json_path_equals": {"status": "completed"}}
+    },
+    {
+      "id": "T16",
+      "name": "Supervisor login works",
+      "request": {
+        "method": "POST",
+        "path": "/login",
+        "json": {"username": "supervisor@primarie.ro", "password": "supervisor"}
+      },
+      "expect": {"status": 200, "set_cookie_contains": "access_token="}
+    },
+    {
+      "id": "T17",
+      "name": "Supervisor can access tasks",
+      "request": {
+        "method": "GET",
+        "path": "/operator/tasks",
+        "auth": {"username": "supervisor@primarie.ro", "password": "supervisor"}
+      },
+      "expect": {"status": 200, "json_type": "list"}
+    },
+    {
+      "id": "T18",
+      "name": "Citizen cannot access operator tasks",
+      "request": {
+        "method": "GET",
+        "path": "/operator/tasks",
+        "auth": {"username": "citizen@exemplu.ro", "password": "citizen"}
+      },
+      "expect": {"status": 403}
+    },
+    {
+      "id": "T19",
+      "name": "Chat session state is persisted across turns",
+      "request": {
+        "method": "POST",
+        "path": "/api/chat",
+        "sequence": [
+          {"json": {"session_id": "s_t19", "message": "buletin"}},
+          {"json": {"session_id": "s_t19", "message": "da"}}
+        ]
+      },
+      "expect": {"status": 200, "json_path_exists": ["state"]}
+    },
+    {
+      "id": "T20",
+      "name": "Injection-style prompt does not unlock operator endpoints",
+      "request": {
+        "method": "GET",
+        "path": "/operator/tasks",
+        "headers": {"X-Debug": "pretend-admin"}
+      },
+      "expect": {"status": 401}
+    },
+    {
+      "id": "T21",
+      "name": "Tax workflow responds with payment-related guidance",
+      "request": {
+        "method": "POST",
+        "path": "/api/chat",
+        "json": {"session_id": "s_t21", "message": "impozit"}
+      },
+      "expect": {"status": 200, "json_path_contains": {"reply": "plata"}}
+    },
+    {
+      "id": "T22",
+      "name": "CI workflow can request operator help (smoke)",
+      "request": {
+        "method": "POST",
+        "path": "/api/chat",
+        "json": {"session_id": "s_t22", "message": "Am nevoie de ajutor de la operator pentru buletin"}
+      },
+      "expect": {"status": 200, "json_path_contains": {"reply": "operator"}}
+    },
+    {
+      "id": "T23",
+      "name": "Legal question keeps workflow domain unchanged when already selected",
+      "request": {
+        "method": "POST",
+        "path": "/api/chat",
+        "sequence": [
+          {"json": {"session_id": "s_t23", "message": "buletin"}},
+          {"json": {"session_id": "s_t23", "message": "Care e legea?"}}
+        ]
+      },
+      "expect": {"status": 200, "json_path_equals": {"state.current_domain": "ci"}}
+    },
+    {
+      "id": "T24",
+      "name": "Logout clears cookie",
+      "request": {
+        "method": "POST",
+        "path": "/logout",
+        "auth": {"username": "operator@primarie.ro", "password": "operator"}
+      },
+      "expect": {"status": 200, "set_cookie_contains": "access_token=;"}
+    },
+    {
+      "id": "T25",
+      "name": "After logout, operator tasks endpoint is unauthorized",
+      "request": {
+        "method": "GET",
+        "path": "/operator/tasks",
+        "cookies": {"access_token": ""}
+      },
+      "expect": {"status": 401}
+    }
+  ]
+}

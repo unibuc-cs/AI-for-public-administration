@@ -33,29 +33,25 @@ Agents / MCP: Each operation is already a tool (agents/tools.py). Wrapping them 
 State: Keep the case creation separate from scheduling; rescheduling remains via /api/reschedule.
 """
 
-import os, json
+import os
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Request, Depends
 from pydantic import BaseModel, Field
 from agents.graph import run_agent_graph
-import httpx
-import re
 from agents.http_client import make_async_client
 from agents.history import  HistoryStore
 
 
 # Import tools (side-effect functions) and RAG helper
 from agents.tools import (
-    tool_docs_required, tool_docs_missing,
-    tool_case_submit, tool_payment, tool_signature, tool_schedule,
-    tool_reschedule, tool_cancel_appointment, tool_upload,
-    tool_notify_email, tool_notify_sms, tool_schedule_by_slot
+    tool_docs_missing,
+    tool_case_submit, tool_reschedule, tool_cancel_appointment, tool_schedule_by_slot
 )
 
 from audit import write_audit
 from agents import rag
-from auth import get_user_from_cookie, UserCtx
-from services.authz import actor_from_userctx, require_perm
+from services.auth import get_user_from_cookie, UserCtx
+from services.auth import actor_from_userctx, require_perm
 
 router = APIRouter()
 
@@ -273,14 +269,14 @@ class ReschedIn(BaseModel):
 
 
 @router.post("/reschedule")
-async def reschedule_api(data: ReschedIn, _user=Depends(require_perm("schedule:write"))):
+async def reschedule_api(data: ReschedIn, user=Depends(require_perm("schedule:write"))):
     """
     Reschedule an appointment at the CEI-HUB (mock).
     """
-    return await tool_reschedule(data.appt_id, data.new_slot_id)
+    return await tool_reschedule(data.appt_id, data.new_slot_id, actor=actor_from_userctx(user))
 
 @router.post("/session/reset")
-def reset_session(data: ResetIn, _user=Depends(require_perm("uploads:purge"))):
+def reset_session(data: ResetIn, user=Depends(require_perm("session:reset"))):
     """Drop all state for a given session id."""
     sid = data.sid
     removed = {"sessions": bool(SESSIONS.pop(sid, None)), "state": bool(SESS_STATE.pop(sid, None))}
@@ -294,11 +290,11 @@ class CancelIn(BaseModel):
 
 
 @router.post("/cancel")
-async def cancel_api(data: CancelIn, _user=Depends(require_perm("schedule:write"))):
+async def cancel_api(data: CancelIn, user=Depends(require_perm("schedule:write"))):
     """
     Cancel an appointment at the CEI-HUB (mock).
     """
-    return await tool_cancel_appointment(data.appt_id)
+    return await tool_cancel_appointment(data.appt_id, actor=actor_from_userctx(user))
 
 
 # --------------------------- RAG SEARCH (DEBUG) ---------------------------
@@ -313,7 +309,7 @@ class SearchIn(BaseModel):
 
 # TODO: should we move this somewhere, because this is generic.What if we have other apps as well, e.g., a "dosar social" in romanian
 @router.post("/search")
-def rag_search(data: SearchIn):
+def rag_search(data: SearchIn, _user=Depends(require_perm("rag:search"))):
     """
     Return top-k chunks for a query, with similarity score and source path.
     """
@@ -400,7 +396,7 @@ async def list_slots_api(location_id: Optional[str] = None):
     """
     Pass-through for hub slots so the form can populate the selector.
     """
-    import os, httpx
+    import os
     HUB_URL = os.getenv("HUB_URL", "http://127.0.0.1:8000/hub")
     async with make_async_client() as client:
         r = await client.get(f"{HUB_URL}/slots", params={"location_id": location_id} if location_id else None)

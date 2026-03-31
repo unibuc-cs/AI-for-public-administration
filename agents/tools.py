@@ -26,6 +26,8 @@ _default_local = "http://localhost:8000/local" if RUN_MODE == "mounted" else "ht
 HUB_URL = os.getenv("HUB_URL", _default_hub)
 LOCAL_URL = os.getenv("LOCAL_URL", _default_local)
 
+from services.auth import assert_actor_perm
+
 
 # External service endpoints (mock servers)
 
@@ -183,20 +185,24 @@ async def tool_schedule_by_slot(slot_id: str, cnp: str | None = None):
         return r.json()
 
 
-async def tool_reschedule(appt_id: str, new_slot_id: str) -> dict:
+async def tool_reschedule(appt_id: str, new_slot_id: str, actor: dict | None = None) -> dict:
     """
     Reschedule an existing CEI appointment to a new slot.
+    RBAC: requires schedule:write.
     """
+    assert_actor_perm(actor or {}, "schedule:write")
     async with make_async_client() as client:
         r = await client.patch(f"{HUB_URL}/appointments/{appt_id}", json={"slot_id": new_slot_id})
         r.raise_for_status()
         return r.json()
 
 
-async def tool_cancel_appointment(appt_id: str) -> dict:
+async def tool_cancel_appointment(appt_id: str, actor: dict | None = None) -> dict:
     """
     Cancel an existing CEI appointment.
+    RBAC: requires schedule:write.
     """
+    assert_actor_perm(actor or {}, "schedule:write")
     async with make_async_client() as client:
         r = await client.delete(f"{HUB_URL}/appointments/{appt_id}")
         r.raise_for_status()
