@@ -31,3 +31,6 @@ static/uploads/
 # ---- OneDrive temp files ----
 ~$*
 "@ | Set-Content .gitignore
+
+
+.claude
