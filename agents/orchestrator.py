@@ -38,8 +38,16 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Request, Depends
 from pydantic import BaseModel, Field
 from agents.graph import run_agent_graph
+from agents.harness import run_turn as run_harness_turn
+from agents.harness import reset_session as harness_reset_session
 from agents.http_client import make_async_client
 from agents.history import  HistoryStore
+
+# Agent architecture selector:
+#   "v2" (default) = single agent on the harness, domains as skills (agents/harness.py)
+#   "v1"           = legacy multi-agent A2A graph (agents/graph.py)
+# See Doc/harness-migration-plan.md.
+AGENT_MODE = os.getenv("AGENT_MODE", "v2").strip().lower()
 
 
 # Import tools (side-effect functions) and RAG helper
@@ -232,16 +240,32 @@ async def chat_api(data: ChatIn, request: Request):
     except Exception:
         pass
 
-    result = await run_agent_graph(state)
-    reply = result.get("reply", "OK")
+    if AGENT_MODE == "v1":
+        result = await run_agent_graph(state)
+        out = {
+            "reply": result.get("reply", "OK"),
+            "steps": result.get("steps", []),
+            "halted": True,
+            # v1 has no explicit state object; expose what the graph left behind so
+            # the response contract matches v2 for side-by-side comparison.
+            "state": {
+                "current_domain": result.get("intent"),
+                "last_agent": result.get("last_agent"),
+                "mode": "v1",
+            },
+        }
+    else:
+        out = await run_harness_turn(
+            session_id=sid,
+            message=msg,
+            actor=actor,
+            history=state["history"],
+            person=state["person"],
+            app=state["app"],
+        )
 
-
-
-    return {
-        "reply": reply,
-        "steps": result.get("steps", []),
-        "halted": True,
-    }
+    CONV_HIST.add_user_turn(sid=sid, role="assistant", text=out.get("reply", "") or "")
+    return out
 
 # A slot selected by the user response
 @router.post("/select_slot")
@@ -279,7 +303,11 @@ async def reschedule_api(data: ReschedIn, user=Depends(require_perm("schedule:wr
 def reset_session(data: ResetIn, user=Depends(require_perm("session:reset"))):
     """Drop all state for a given session id."""
     sid = data.sid
-    removed = {"sessions": bool(SESSIONS.pop(sid, None)), "state": bool(SESS_STATE.pop(sid, None))}
+    removed = {
+        "sessions": bool(SESSIONS.pop(sid, None)),
+        "state": bool(SESS_STATE.pop(sid, None)),
+        "harness": harness_reset_session(sid),
+    }
     return {"ok": True, "removed": removed}
 
 class CancelIn(BaseModel):

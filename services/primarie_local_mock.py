@@ -399,6 +399,27 @@ def list_tasks(type: Optional[str] = None, status: Optional[str] = None):
     return out
 
 
+@local.post("/tasks")
+def create_task(payload: Dict[str, Any]):
+    """Enqueue a human-in-the-loop task for a case."""
+    case_id = (payload.get("case_id") or "").strip()
+    if not case_id:
+        raise HTTPException(status_code=422, detail="case_id is required")
+    kind = (payload.get("kind") or "MANUAL_VERIFY").strip()
+    with Session(engine) as s:
+        t = Task(case_id=case_id, kind=kind, status="OPEN",
+                 notes=payload.get("notes"))
+        s.add(t)
+        s.commit()
+        s.refresh(t)
+        created = {"id": t.id, "case_id": t.case_id, "kind": t.kind,
+                   "status": t.status, "notes": t.notes}
+
+    _audit(actor="system", action="TASK_CREATE", entity_type="task",
+           entity_id=str(created["id"]), details={"case_id": case_id, "kind": kind})
+    return {"ok": True, "task": created}
+
+
 @local.post("/tasks/{task_id}/claim")
 def claim_task(task_id: int, payload: Dict[str, Any]):
     assignee = payload.get("assignee") or "operator@demo.local"

@@ -26,5 +26,13 @@
   "acte_locuire": {
     "label": "Acte de locuire (contract / declaratie)",
     "hints": []
+  },
+  "plan_situatie": {
+    "label": "Plan de situatie (scara 1:500 / 1:1000)",
+    "hints": ["vizat de un topograf autorizat"]
+  },
+  "extras_cf": {
+    "label": "Extras de carte funciara",
+    "hints": ["actualizat", "emis de OCPI"]
   }
 }

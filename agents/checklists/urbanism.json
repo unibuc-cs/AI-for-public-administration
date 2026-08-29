@@ -1,0 +1,10 @@
+{
+  "program": "URB",
+  "required_docs": [
+    "carte_identitate",
+    "dovada_adresa",
+    "plan_situatie",
+    "extras_cf"
+  ],
+  "notes": "Certificat de urbanism. Added as a config-only domain to measure the marginal cost of a new procedure under the v2 architecture (see Doc/harness-migration-plan.md section 9)."
+}

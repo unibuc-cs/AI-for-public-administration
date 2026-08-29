@@ -103,6 +103,10 @@ def _run_single(client: TestClient, req: Dict[str, Any], ctx: RunContext) -> Any
     headers = req.get("headers") or {}
     cookies = req.get("cookies") or {}
 
+    # Tests must be independent: a session established by an earlier test must not
+    # leak into a later one that expects an anonymous caller.
+    client.cookies.clear()
+
     # Optional auth handshake
     if "auth" in req and req["auth"]:
         _login(client, req["auth"]["username"], req["auth"]["password"])

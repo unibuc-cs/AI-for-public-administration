@@ -11,7 +11,10 @@
 # to be available at HUB_URL and LOCAL_URL. If you prefer to run everything
 # from a single uvicorn process, you can mount those FastAPI apps as sub-apps
 
-import io, mimetypes, uuid, time
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before any other imports that need env vars
+
+import os, io, json, mimetypes, uuid, time
 from typing import Optional
 from agents.http_client import make_async_client
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
@@ -21,9 +24,6 @@ from fastapi.templating import Jinja2Templates
 from PIL import Image
 from db import getRandomSessionId
 from services.auth import require_role
-from dotenv import load_dotenv
-import os
-load_dotenv()
 
 # Running mode: "mounted" (default) runs the mock services as separate processes,
 # "split" mounts them as sub-apps (easier for local testing, but not realistic).
@@ -177,36 +177,62 @@ def login_page(request: Request):
 
 
 @app.post("/login")
-async def login(form: Request):
+async def login(request: Request):
     """
-    Handle login form POST. On success, set the JWT cookie and redirect to /operator.
-    On failure, re-render the login with an error message.
+    Handle login. Accepts either the HTML form (email/password) or a JSON body
+    ({"username"|"email", "password"}) for programmatic/API clients.
+    On success sets the JWT cookie; form clients are redirected to /operator,
+    JSON clients get 200 with a small JSON body.
     """
-    data = await form.form()
-    email = data.get("email", "").strip()
-    password = data.get("password", "")
+    wants_json = (request.headers.get("content-type") or "").startswith("application/json")
+    if wants_json:
+        data = await request.json()
+        email = (data.get("email") or data.get("username") or "").strip()
+        password = data.get("password") or ""
+    else:
+        data = await request.form()
+        email = (data.get("email") or "").strip()
+        password = data.get("password") or ""
+
     user = authenticate(email, password)
     if not user:
+        if wants_json:
+            return JSONResponse({"ok": False, "error": "invalid_credentials"}, status_code=401)
         return templates.TemplateResponse(
             "login.html",
-            {"request": form, "app_title": APP_TITLE, "err": "Invalid credentials"},
+            {"request": request, "app_title": APP_TITLE, "err": "Invalid credentials"},
             status_code=401
         )
+
     token = create_token(email)
-    resp = RedirectResponse("/operator", status_code=303)
+    if wants_json:
+        resp = JSONResponse({"ok": True, "email": user["email"], "role": user["role"]})
+    else:
+        resp = RedirectResponse("/operator", status_code=303)
     # Store token in a cookie; httponly prevents JavaScript from reading it
     resp.set_cookie("access_token", token, httponly=True, samesite="lax")
     return resp
 
 
-@app.get("/logout")
-def logout():
-    """
-    Clear the auth cookie and redirect to the homepage (chat).
-    """
-    resp = RedirectResponse("/", status_code=303)
-    resp.delete_cookie("access_token")
+def _clear_auth_cookie(resp):
+    """Emit an explicit expired cookie (delete_cookie renders an empty quoted value)."""
+    resp.headers.append(
+        "set-cookie",
+        "access_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; "
+        "HttpOnly; SameSite=lax",
+    )
     return resp
+
+
+@app.api_route("/logout", methods=["GET", "POST"])
+def logout(request: Request):
+    """
+    Clear the auth cookie. GET redirects to the chat homepage (browser flow);
+    POST returns JSON (API flow).
+    """
+    if request.method == "POST":
+        return _clear_auth_cookie(JSONResponse({"ok": True}))
+    return _clear_auth_cookie(RedirectResponse("/", status_code=303))
 
 
 # --------------------------- PUBLIC CHAT UI ---------------------------
@@ -323,19 +349,118 @@ async def op_cancel(
 
 # --------------------------- HITL QUEUE ACTIONS ---------------------------
 
+# The queue is exposed twice: as an HTML form flow for the dashboard, and as a
+# JSON API for programmatic clients and the test suite. Both share one role gate.
+
+# Backend statuses -> stable API vocabulary.
+_TASK_STATUS_API = {"OPEN": "open", "ASSIGNED": "claimed", "DONE": "completed"}
+
+
+def _task_json(t: dict) -> dict:
+    raw = (t or {}).get("status") or ""
+    return {
+        "task_id": (t or {}).get("id"),
+        "case_id": (t or {}).get("case_id"),
+        "kind": (t or {}).get("kind"),
+        "status": _TASK_STATUS_API.get(raw.upper(), raw.lower()),
+        "assignee": (t or {}).get("assignee"),
+        "notes": (t or {}).get("notes"),
+    }
+
+
+async def _read_task_id(request: Request) -> tuple[Optional[int], bool, dict]:
+    """Return (task_id, wants_json, body) accepting either a JSON or form body."""
+    wants_json = (request.headers.get("content-type") or "").startswith("application/json")
+    if wants_json:
+        body = await request.json()
+    else:
+        body = dict(await request.form())
+    try:
+        return int(body.get("task_id")), wants_json, body
+    except (TypeError, ValueError):
+        return None, wants_json, body
+
+
+@app.get("/operator/tasks")
+async def operator_tasks_list(
+    status: Optional[str] = None,
+    user=Depends(require_role(["operator", "supervisor"])),
+):
+    """List HITL tasks as JSON. Anonymous callers get 401, other roles 403."""
+    async with make_async_client() as client:
+        r = await client.get(f"{LOCAL_URL}/tasks", params={"status": status} if status else None)
+        tasks = r.json()
+    if isinstance(tasks, dict):
+        tasks = tasks.get("tasks", [])
+    return JSONResponse([_task_json(t) for t in (tasks or [])])
+
+
+@app.post("/operator/tasks/enqueue")
+async def operator_task_enqueue(
+    request: Request,
+    user=Depends(require_role(["operator", "supervisor"])),
+):
+    """Create a HITL task for a case."""
+    body = await request.json()
+    payload = {
+        "case_id": body.get("case_id") or "",
+        "kind": body.get("kind") or "MANUAL_VERIFY",
+        "notes": json.dumps(body.get("payload") or {}, ensure_ascii=False),
+    }
+    async with make_async_client() as client:
+        r = await client.post(f"{LOCAL_URL}/tasks", json=payload)
+        r.raise_for_status()
+        created = r.json()
+    task = created.get("task", created)
+    return _task_json(task)
+
+
 @app.post("/operator/tasks/claim")
 async def claim_task(
     request: Request,
     user=Depends(require_role(["operator", "supervisor"])),
-    task_id: int = Form(...),
 ):
     """
     Claim a HITL task (assign to current operator).
+    Accepts a JSON body (returns JSON) or the dashboard form (redirects).
     """
+    task_id, wants_json, _ = await _read_task_id(request)
+    if task_id is None:
+        raise HTTPException(status_code=422, detail="task_id is required")
 
     async with make_async_client() as client:
-        await client.post(f"{LOCAL_URL}/tasks/{task_id}/claim", json={"assignee": user.email})
+        r = await client.post(f"{LOCAL_URL}/tasks/{task_id}/claim",
+                              json={"assignee": user.email})
+        r.raise_for_status()
+        result = r.json()
 
+    if wants_json:
+        return _task_json({**(result.get("task") or {}), "case_id": None})
+    return RedirectResponse("/operator", status_code=303)
+
+
+@app.post("/operator/tasks/complete")
+async def complete_task_api(
+    request: Request,
+    user=Depends(require_role(["operator", "supervisor"])),
+):
+    """Complete a HITL task (JSON API counterpart of /operator/tasks/done)."""
+    task_id, wants_json, body = await _read_task_id(request)
+    if task_id is None:
+        raise HTTPException(status_code=422, detail="task_id is required")
+
+    notes = body.get("notes")
+    if notes is None and body.get("result") is not None:
+        notes = json.dumps(body.get("result"), ensure_ascii=False)
+
+    async with make_async_client() as client:
+        r = await client.post(f"{LOCAL_URL}/tasks/{task_id}/complete",
+                              json={"notes": notes or ""})
+        r.raise_for_status()
+        result = r.json()
+
+    if wants_json:
+        return _task_json({**(result.get("task") or {}), "case_id": None})
     return RedirectResponse("/operator", status_code=303)
 
 
@@ -535,9 +660,10 @@ def confirm_ci(request: Request, sid: str, decided: str = "auto"):
     })
 
 
-@app.get("/healthz")
+@app.api_route("/healthz", methods=["GET"])
+@app.api_route("/health", methods=["GET"])
 def health():
     """
-    Simple health-check endpoint for probes.
+    Simple health-check endpoint for probes. Exposed at both /healthz and /health.
     """
-    return {"ok": True}
+    return {"ok": True, "status": "ok", "agent_mode": os.getenv("AGENT_MODE", "v2")}

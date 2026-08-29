@@ -52,6 +52,41 @@ USERS = {
             "rag:search",
         ],
     },
+    # One demo account per role, used by the JSON test suite. The citizen account
+    # exists so the citizen role in ROLE_PERMS is actually exercisable: it must be
+    # able to log in and still be refused the operator surfaces.
+    "operator@primarie.ro": {
+        "email": "operator@primarie.ro",
+        "name": "Operator Primarie",
+        "hashed": pwd.hash("operator"),
+        "role": "operator",
+        "scopes": ["case:read", "case:update", "schedule:write", "uploads:list"],
+    },
+    "supervisor@primarie.ro": {
+        "email": "supervisor@primarie.ro",
+        "name": "Supervisor Primarie",
+        "hashed": pwd.hash("supervisor"),
+        "role": "supervisor",
+        "scopes": [
+            "case:read",
+            "case:update",
+            "case:assign",
+            "case:close",
+            "schedule:write",
+            "uploads:list",
+            "uploads:purge",
+            "audit:read",
+            "session:reset",
+            "rag:search",
+        ],
+    },
+    "citizen@exemplu.ro": {
+        "email": "citizen@exemplu.ro",
+        "name": "Cetatean Demo",
+        "hashed": pwd.hash("citizen"),
+        "role": "citizen",
+        "scopes": ["uploads:list"],
+    },
 }
 
 

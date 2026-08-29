@@ -1,0 +1,7 @@
+{
+  "_comment": "Per-deployment document rules. Absorbed from field spec FS-0007: an office that rejects proof-of-address older than N days is configuration, not code. Add a doc kind here with max_age_days to enforce a validity window; omit the kind to accept any issue date.",
+  "dovada_adresa": {
+    "max_age_days": 30,
+    "source": "FS-0007 / SPCLEP Sector 3"
+  }
+}
